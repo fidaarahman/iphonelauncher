@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
-import android.provider.AlarmClock
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -13,11 +12,11 @@ import androidx.core.content.ContextCompat
 /**
  * Replaces the icons of built-in apps with bundled iPhone-style icons.
  *
- * Apps are matched by ROLE, not by package name: "the default camera app gets ios_camera",
- * "the default browser gets ios_safari", etc. Package names differ between Samsung, Vivo,
+ * Apps are matched by ROLE, not by package name: "the default camera app gets ic_camera",
+ * "the default browser gets ic_compass", etc. Package names differ between Samsung, Vivo,
  * Xiaomi... but these roles work on every phone.
  *
- * Images are looked up by name in res/drawable (ios_phone.png, ios_camera.png, ...).
+ * Images are looked up by name in res/drawable (ic_phone.png, ic_camera.png, ...).
  * If an image hasn't been added yet, that app simply keeps its own icon, so the project
  * builds and runs before all icons are in place.
  */
@@ -62,20 +61,15 @@ class IosIconProvider(private val context: Context) {
         context.resources.getIdentifier(name, "drawable", context.packageName)
 
     private fun roleIcons(): List<Pair<Intent, String>> = listOf(
-        Intent(Intent.ACTION_DIAL) to "ios_phone",
-        category(Intent.CATEGORY_APP_MESSAGING) to "ios_messages",
-        category(Intent.CATEGORY_APP_BROWSER) to "ios_safari",
-        Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA) to "ios_camera",
-        category(Intent.CATEGORY_APP_GALLERY) to "ios_photos",
-        category(Intent.CATEGORY_APP_CALENDAR) to "ios_calendar",
-        category(Intent.CATEGORY_APP_CALCULATOR) to "ios_calculator",
-        category(Intent.CATEGORY_APP_CONTACTS) to "ios_contacts",
-        category(Intent.CATEGORY_APP_EMAIL) to "ios_mail",
-        category(Intent.CATEGORY_APP_MAPS) to "ios_maps",
-        category(Intent.CATEGORY_APP_MUSIC) to "ios_music",
-        category(CATEGORY_APP_FILES) to "ios_files",
-        Intent(Settings.ACTION_SETTINGS) to "ios_settings",
-        Intent(AlarmClock.ACTION_SHOW_ALARMS) to "ios_clock"
+        Intent(Intent.ACTION_DIAL) to "ic_phone",
+        category(Intent.CATEGORY_APP_MESSAGING) to "ic_messages",
+        category(Intent.CATEGORY_APP_BROWSER) to "ic_compass",
+        Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA) to "ic_camera",
+        category(Intent.CATEGORY_APP_GALLERY) to "ic_photos",
+        category(Intent.CATEGORY_APP_EMAIL) to "ic_mail",
+        category(Intent.CATEGORY_APP_MAPS) to "ic_maps",
+        category(Intent.CATEGORY_APP_MUSIC) to "ic_music",
+        Intent(Settings.ACTION_SETTINGS) to "ic_setting"
     )
 
     private fun category(category: String) = Intent(Intent.ACTION_MAIN).addCategory(category)
@@ -83,14 +77,10 @@ class IosIconProvider(private val context: Context) {
     companion object {
         private const val SYSTEM_PACKAGE = "android"
 
-        // Intent.CATEGORY_APP_FILES is API 29+; the string works on every version.
-        private const val CATEGORY_APP_FILES = "android.intent.category.APP_FILES"
-
         /** Apps with no standard role - matched by package name. */
         private val PACKAGE_ICONS = mapOf(
-            "com.android.vending" to "ios_app_store",     // Play Store
-            "com.google.android.keep" to "ios_notes",     // Google Keep
-            "com.google.android.apps.weather" to "ios_weather"
+            "com.android.vending" to "ic_playstore",  // Play Store
+            "com.google.android.keep" to "ic_notes"   // Google Keep
         )
     }
 }
