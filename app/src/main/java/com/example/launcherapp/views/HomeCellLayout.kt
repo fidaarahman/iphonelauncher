@@ -36,14 +36,7 @@ class HomeCellLayout @JvmOverloads constructor(
             requestLayout()
         }
 
-    private val iconSize = resources.getDimensionPixelSize(R.dimen.home_icon_size)
-
-    /**
-     * Rows never get taller than this (iOS keeps a fixed row spacing). On tall screens the
-     * rows stay packed at the top and the spare space ends up above the search pill,
-     * like the Figma design, instead of the grid stretching over the whole page.
-     */
-    private val maxCellHeight = resources.getDimensionPixelSize(R.dimen.home_cell_max_height)
+    private val iconSize = (ICON_SIZE_DP * resources.displayMetrics.density).toInt()
 
     private var cellWidth = 0
     private var cellHeight = 0
@@ -68,7 +61,7 @@ class HomeCellLayout @JvmOverloads constructor(
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val height = MeasureSpec.getSize(heightMeasureSpec)
         cellWidth = (width - paddingLeft - paddingRight) / columns
-        cellHeight = min((height - paddingTop - paddingBottom) / rows, maxCellHeight)
+        cellHeight = (height - paddingTop - paddingBottom) / rows
 
         for (i in 0 until childCount) {
             val child = getChildAt(i)
@@ -159,5 +152,6 @@ class HomeCellLayout @JvmOverloads constructor(
     companion object {
         const val DEFAULT_COLUMNS = 4
         const val DEFAULT_ROWS = 6
+        private const val ICON_SIZE_DP = 60
     }
 }

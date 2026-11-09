@@ -13,7 +13,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.example.launcherapp.R
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
@@ -36,7 +35,7 @@ import kotlin.math.sin
 class IconShaper(context: Context) {
 
     private val resources = context.resources
-    private val size = resources.getDimensionPixelSize(R.dimen.home_icon_size)
+    private val size = (ICON_SIZE_DP * resources.displayMetrics.density).toInt()
 
     /** Everything OUTSIDE the squircle - cleared after drawing the icon. */
     private val outsideSquircle = squirclePath(size.toFloat()).apply {
@@ -114,6 +113,7 @@ class IconShaper(context: Context) {
     }
 
     companion object {
+        private const val ICON_SIZE_DP = 60
         private const val EXPONENT = 5.0
         private const val POINTS = 120
         private const val LEGACY_INSET = 0.14f

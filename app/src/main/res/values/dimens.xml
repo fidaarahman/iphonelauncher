@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="home_icon_size">60dp</dimen>
     <dimen name="home_cell_padding_top">6dp</dimen>
-    <dimen name="home_cell_max_height">92dp</dimen>
     <dimen name="home_grid_padding_horizontal">16dp</dimen>
-    <dimen name="home_grid_padding_top">64dp</dimen>
+    <dimen name="home_grid_padding_top">8dp</dimen>
 </resources>

@@ -1,9 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    2x2 clock widget. HomeCellLayout sets widgetBody's width/height at measure time so the
-    tile lines up with the surrounding icons and the "Clock" label sits on the same line as
-    the app labels beside it. The 150dp here is only a preview size.
--->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
