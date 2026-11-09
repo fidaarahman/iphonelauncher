@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One grid cell. Icons arrive already squircle-shaped from IconShaper, so no clipping here. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingStart="2dp"
+    android:paddingTop="@dimen/home_cell_padding_top"
+    android:paddingEnd="2dp">
+
+    <ImageView
+        android:id="@+id/appIcon"
+        android:layout_width="@dimen/home_icon_size"
+        android:layout_height="@dimen/home_icon_size"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/appLabel"
+        style="@style/HomeIconLabel" />
+
+</LinearLayout>

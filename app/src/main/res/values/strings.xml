@@ -1,3 +1,29 @@
 <resources>
     <string name="app_name">LauncherApp</string>
+    <string name="splash_title">Welcome to Launcher OS</string>
+    <string name="splash_subtitle">Customize your home screen and enjoy a seamless, personalized mobile experience..</string>
+    <string name="home_search">Search</string>
+    <string name="home_widget_clock">Clock</string>
+
+    <string name="settings_default_launcher_title">Set as Default Launcher</string>
+    <string name="settings_default_launcher_subtitle">Set Launcher OS 18 as default for the best experience.</string>
+    <string name="settings_row_default_home_screen">Select Default Home Screen</string>
+    <string name="settings_row_general">General</string>
+    <string name="settings_row_language">Language</string>
+    <string name="settings_section_personalization">Personalization</string>
+    <string name="settings_row_wallpaper">Wallpaper</string>
+    <string name="settings_row_theme_packs">Theme Packs</string>
+    <string name="settings_row_ringtone">Ringtone</string>
+    <string name="settings_section_smart_features">Smart Features</string>
+    <string name="settings_row_control_center">Control Center</string>
+    <string name="settings_row_widgets">Widgets</string>
+    <string name="settings_row_app_lock">App Lock</string>
+    <string name="settings_row_change_app_icon">Change App Icon</string>
+    <string name="settings_row_hide_apps">Hide Apps</string>
+    <string name="settings_row_change_app_name">Change App Name</string>
+    <string name="settings_section_support">Support</string>
+    <string name="settings_row_rate_app">Rate App</string>
+    <string name="settings_row_share_app">Share App</string>
+    <string name="settings_row_feedback">FeedBack</string>
+    <string name="settings_row_privacy_policy">Privacy Policy</string>
 </resources>
