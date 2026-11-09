@@ -2,6 +2,7 @@ package com.example.launcherapp.ui.activities
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.graphics.Color
 import android.graphics.drawable.Drawable
@@ -10,6 +11,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.provider.AlarmClock
+import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -31,10 +34,16 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import androidx.recyclerview.widget.GridLayoutManager
 import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityLauncherHomeBinding
+import com.example.launcherapp.utils.AppLaunchTracker
 import com.example.launcherapp.utils.DragController
+import com.example.launcherapp.ui.adapters.AppLibraryAdapter
+import com.example.launcherapp.ui.model.AppCategorizer
+import com.example.launcherapp.ui.model.AppLibraryBuilder
+import com.example.launcherapp.ui.model.AppLibraryGroup
 import com.example.launcherapp.ui.model.HomeGrid
 import com.example.launcherapp.Repositories.HomeLayoutRepository
 import com.example.launcherapp.ui.model.HomeModel
@@ -60,6 +69,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         private set
 
     private var appsByKey: Map<String, LauncherAppEntry> = emptyMap()
+    private var appLibraryGroups: List<AppLibraryGroup> = emptyList()
 
     // Touch bookkeeping for drag & drop
     private var lastTouchRawX = 0f
@@ -109,6 +119,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         dragController = DragController(binding.homePager, binding.dock, binding.dragLayer, this)
 
         setupPager()
+        watchHomePageBottomSpace()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -174,6 +185,8 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         thread(name = "launcher-load-apps") {
             val apps = loadLaunchableApps()
             val loaded = layoutRepository.load(apps, defaultDockPackages())
+            val suggested = suggestionsFor(apps)
+            val libraryGroups = AppLibraryBuilder.build(apps, suggested)
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (dragController.isDragging) {
@@ -186,12 +199,15 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                     return@runOnUiThread
                 }
                 appsByKey = apps.associateBy { it.key }
+                appLibraryGroups = libraryGroups
                 model = loaded
                 layoutRepository.save(model)
 
                 pagerAdapter.notifyDataSetChanged()
-                if (binding.homePager.currentItem > model.pages.lastIndex) {
-                    binding.homePager.setCurrentItem(model.pages.lastIndex, false)
+                // Valid range is 0..pages.size inclusive - the App Library sits one past the
+                // last home page, so this must not clamp someone currently viewing it.
+                if (binding.homePager.currentItem > model.pages.size) {
+                    binding.homePager.setCurrentItem(model.pages.size, false)
                 }
                 rebuildPageDots()
                 refreshDock()
@@ -221,20 +237,57 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     }
 
     private fun loadLaunchableApps(): List<LauncherAppEntry> {
+        // Default browser / phone / camera... are looked up once per load, not once per app.
+        AppCategorizer.refreshRoles(packageManager)
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         return packageManager.queryIntentActivities(intent, 0)
             .map { info ->
                 val packageName = info.activityInfo.packageName
+                val label = info.loadLabel(packageManager).toString()
+                val flags = info.activityInfo.applicationInfo.flags
                 LauncherAppEntry(
-                    label = info.loadLabel(packageManager).toString(),
+                    label = label,
                     icon = homeIcon(packageName) { info.loadIcon(packageManager) },
                     packageName = packageName,
                     activityName = info.activityInfo.name,
-                    installTime = installTimeOf(packageName)
+                    installTime = installTimeOf(packageName),
+                    category = AppCategorizer.categorize(packageName, label, packageManager),
+                    isSystemApp = flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
+                            flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
                 )
             }
             .sortedBy { it.label.lowercase() }
     }
+
+    /**
+     * App Library "Suggestions", best source first:
+     * 1. Usage Access data (your existing HomeLayoutRepository.suggestedApps - empty if not granted);
+     * 2. apps launched most from this launcher (AppLaunchTracker);
+     * 3. on a fresh install: the default phone, messages, browser, camera, gallery, settings, clock.
+     * 2 and 3 are combined so the tile is full even after only a few launches.
+     */
+    private fun suggestionsFor(apps: List<LauncherAppEntry>): List<LauncherAppEntry> {
+        val ownPackage = packageName
+        val fromUsage = layoutRepository.suggestedApps(apps).filter { it.packageName != ownPackage }
+        if (fromUsage.isNotEmpty()) return fromUsage.take(SUGGESTIONS_COUNT)
+        return (AppLaunchTracker.mostLaunched(apps, SUGGESTIONS_COUNT) + defaultSuggestions(apps))
+            .filter { it.packageName != ownPackage }
+            .distinctBy { it.key }
+            .take(SUGGESTIONS_COUNT)
+    }
+
+    private fun defaultSuggestions(apps: List<LauncherAppEntry>): List<LauncherAppEntry> = listOf(
+        Intent(Intent.ACTION_DIAL),
+        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING),
+        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER),
+        Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA),
+        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_GALLERY),
+        Intent(Settings.ACTION_SETTINGS),
+        Intent(AlarmClock.ACTION_SHOW_ALARMS)
+    )
+        .mapNotNull { packageManager.defaultHandlerPackage(it) }
+        .distinct()
+        .mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
 
     private fun installTimeOf(packageName: String): Long =
         runCatching { packageManager.getPackageInfo(packageName, 0).firstInstallTime }.getOrDefault(0L)
@@ -258,16 +311,32 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun setupPager() {
         pagerAdapter = HomePagerAdapter(
             bindPage = { cells, page -> renderPage(cells, page, rebuild = true) },
-            pageCount = { model.pages.size }
+            pageCount = { model.pages.size },
+            bindLibrary = ::bindLibraryPage
         )
         binding.homePager.adapter = pagerAdapter
         // No cross-fade when a page is refreshed - icons slide instead (see HomeCellLayout).
         (binding.homePager.getChildAt(0) as? RecyclerView)?.itemAnimator = null
 
         binding.homePager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) = updatePageDots(position)
+            override fun onPageSelected(position: Int) {
+                updatePageDots(position)
+                // The App Library has no page dot and no dock/search pill, like iOS.
+                val onLibraryPage = position == model.pages.size
+                binding.pageIndicator.isVisible = !onLibraryPage
+                // Faded-out dock/pill are made INVISIBLE too: they sit on top of the library now that
+                // the pager is full height, and invisible-but-clickable icons would steal its taps.
+                fadeTo(binding.dock, visible = !onLibraryPage)
+                if (onLibraryPage) {
+                    binding.root.removeCallbacks(restoreSearchPill)
+                    fadeTo(binding.searchPill, visible = false)
+                } else if (!binding.searchPill.isVisible) {
+                    fadeTo(binding.searchPill, visible = true)
+                }
+            }
 
             override fun onPageScrollStateChanged(state: Int) {
+                if (binding.homePager.currentItem == model.pages.size) return // App Library: no pill/dots to swap
                 // iOS: the "Search" pill turns into page dots while swiping.
                 binding.root.removeCallbacks(restoreSearchPill)
                 if (state == ViewPager2.SCROLL_STATE_IDLE) {
@@ -286,7 +355,64 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
      * of just snapping - the iOS rearrange feel, without ever re-deriving "what's on screen" by
      * scanning the ViewGroup.
      */
+    /**
+     * The pager is full height (so the App Library reaches the bottom of the screen). Home pages
+     * get this much bottom padding so their icons stay above the search pill and dock, exactly
+     * where they were before. Measured from the real layout, so it's right on every screen size.
+     *
+     * Seeded with a generous guess (dock + pill + their margins) instead of 0: the real
+     * measurement only arrives once the layout-change listener fires, and pages can render
+     * before that first firing - with 0 here, that first render would place the bottom row of
+     * icons flush against the screen edge, underneath the dock, making them unreachable until a
+     * later refresh corrected it.
+     */
+    private var homePageBottomSpace = 0
+
+    private fun watchHomePageBottomSpace() {
+        // Seeded here (resources isn't safely available any earlier, e.g. in a field initializer)
+        // so the very first page render already has a safe guess, not 0, before the real
+        // measurement below ever gets a chance to fire.
+        homePageBottomSpace = dp(DEFAULT_BOTTOM_SPACE_DP)
+        binding.homeContent.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val pagerBottom = binding.homeContent.height - binding.homeContent.paddingBottom
+            val space = (pagerBottom - binding.searchPill.top + dp(PILL_GAP_DP)).coerceAtLeast(0)
+            if (space != homePageBottomSpace) {
+                homePageBottomSpace = space
+                // Applied on the next frame: changing padding inside a layout pass is not allowed.
+                binding.homePager.post { applyHomePageBottomSpaceToAttachedPages() }
+            }
+        }
+    }
+
+    private fun applyHomePageBottomSpaceToAttachedPages() {
+        val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return
+        for (i in 0 until recycler.childCount) {
+            val holder = recycler.getChildViewHolder(recycler.getChildAt(i)) as? HomePagerAdapter.PageViewHolder ?: continue
+            applyHomePageBottomSpace(holder.cells)
+        }
+    }
+
+    private fun applyHomePageBottomSpace(cells: HomeCellLayout) {
+        if (cells.paddingBottom != homePageBottomSpace) cells.updatePadding(bottom = homePageBottomSpace)
+    }
+
+    /** Fades a view in/out and makes it INVISIBLE (not tappable) once hidden. */
+    private fun fadeTo(view: View, visible: Boolean) {
+        view.animate().cancel()
+        if (visible) {
+            view.visibility = View.VISIBLE
+            view.animate().alpha(1f).setDuration(160).start()
+        } else {
+            view.animate().alpha(0f).setDuration(160)
+                .withEndAction { view.visibility = View.INVISIBLE }
+                .start()
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
     private fun renderPage(cells: HomeCellLayout, page: Int, rebuild: Boolean) {
+        applyHomePageBottomSpace(cells)
         val views = viewsFor(cells)
         if (rebuild) {
             cells.removeAllViews()
@@ -384,6 +510,13 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         cell.contentDescription = app.label
         attachIconInteractions(touchTarget = cell, iconView = icon, key = app.key)
         return cell
+    }
+
+    /** Fills the App Library page (last position, past the home pages) with its group tiles. */
+    private fun bindLibraryPage(root: ViewGroup) {
+        val list = root.findViewById<RecyclerView>(R.id.libraryGroups)
+        if (list.layoutManager == null) list.layoutManager = GridLayoutManager(this, 2)
+        list.adapter = AppLibraryAdapter(appLibraryGroups) { app -> launchApp(app) }
     }
 
     private fun createClockWidget(parent: ViewGroup): View =
@@ -572,7 +705,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             component = ComponentName(app.packageName, app.activityName)
         }
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-        runCatching { startActivity(intent) } // app may have been uninstalled since loading
+        runCatching {
+            startActivity(intent)
+            AppLaunchTracker.recordLaunch(app.key) // feeds App Library Suggestions
+        } // app may have been uninstalled since loading
     }
 
     /**
@@ -601,17 +737,34 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         private const val WIGGLE_DURATION_MS = 130L
         private const val MOVE_DURATION_MS = 220L
         private const val OVERLAY_FADE_MS = 200L
+        private const val SUGGESTIONS_COUNT = 8
+        private const val PILL_GAP_DP = 6 // gap between the grid and the search pill (old pager marginBottom)
+        // Dock (60dp icons + 16dp top/bottom padding + 8dp bottom margin) + search pill (26dp +
+        // 12dp bottom margin) + PILL_GAP_DP, rounded up - a safe guess before the real layout
+        // measurement is available.
+        private const val DEFAULT_BOTTOM_SPACE_DP = 140
     }
 }
 
+/** The App Library is one extra page past the last home page - its own view type, no HomeCellLayout. */
 private class HomePagerAdapter(
     private val bindPage: (HomeCellLayout, Int) -> Unit,
-    private val pageCount: () -> Int
-) : RecyclerView.Adapter<HomePagerAdapter.PageViewHolder>() {
+    private val pageCount: () -> Int,
+    private val bindLibrary: (ViewGroup) -> Unit
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     class PageViewHolder(val cells: HomeCellLayout) : RecyclerView.ViewHolder(cells)
+    class LibraryViewHolder(val root: ViewGroup) : RecyclerView.ViewHolder(root)
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageViewHolder {
+    override fun getItemViewType(position: Int) =
+        if (position == pageCount()) VIEW_TYPE_LIBRARY else VIEW_TYPE_HOME
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        if (viewType == VIEW_TYPE_LIBRARY) {
+            val root = LayoutInflater.from(parent.context)
+                .inflate(R.layout.page_app_library, parent, false) as ViewGroup
+            return LibraryViewHolder(root)
+        }
         val cells = LayoutInflater.from(parent.context)
             .inflate(R.layout.page_home, parent, false) as HomeCellLayout
         cells.columns = HomeGrid.COLUMNS
@@ -619,9 +772,17 @@ private class HomePagerAdapter(
         return PageViewHolder(cells)
     }
 
-    override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
-        bindPage(holder.cells, position)
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (holder) {
+            is PageViewHolder -> bindPage(holder.cells, position)
+            is LibraryViewHolder -> bindLibrary(holder.root)
+        }
     }
 
-    override fun getItemCount() = pageCount()
+    override fun getItemCount() = pageCount() + 1
+
+    companion object {
+        private const val VIEW_TYPE_HOME = 0
+        private const val VIEW_TYPE_LIBRARY = 1
+    }
 }

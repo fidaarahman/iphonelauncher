@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Root is a FrameLayout so the wallpaper stays full-bleed (behind status + nav bars)
-    while only homeContent receives the system-bar insets as padding.
+    Root is a ConstraintLayout; every full-screen layer is pinned to all four edges.
+    The wallpaper stays full-bleed (behind status + nav bars) while only homeContent receives
+    the system-bar insets as padding (LauncherHomeActivity.applySystemBarInsets).
+    Children are drawn in order, so later layers sit on top: wallpaper < homeContent < dragLayer < loadingOverlay.
 -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -13,23 +15,33 @@
     <!-- centerCrop keeps the wallpaper's aspect ratio (a View background would stretch it). -->
     <ImageView
         android:id="@+id/wallpaper"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
-        android:src="@drawable/walapepr_1" />
+        android:src="@drawable/walapepr_1"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/homeContent"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Full height, so the App Library can scroll down to the bottom of the screen.
+             Home pages get a bottom padding from code (LauncherHomeActivity.applyHomePageBottomSpace)
+             that keeps their icons above the search pill and dock, exactly as before. -->
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/homePager"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_marginBottom="6dp"
-            app:layout_constraintBottom_toTopOf="@id/searchPill"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
@@ -97,8 +109,12 @@
     <!-- Overlay for the floating icon while dragging. Not clickable, so touches pass through. -->
     <FrameLayout
         android:id="@+id/dragLayer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!--
         Shown until the first app list / layout load finishes, so the user never sees the
@@ -107,11 +123,15 @@
     -->
     <FrameLayout
         android:id="@+id/loadingOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:background="#33000000"
         android:clickable="true"
-        android:focusable="true">
+        android:focusable="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <ProgressBar
             android:layout_width="40dp"
@@ -121,4 +141,4 @@
 
     </FrameLayout>
 
-</FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

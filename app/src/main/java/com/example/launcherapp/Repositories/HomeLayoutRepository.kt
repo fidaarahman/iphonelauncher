@@ -89,6 +89,19 @@ class HomeLayoutRepository(private val context: Context) {
         return model
     }
 
+    /**
+     * The App Library's "Suggestions" group: real usage time per app over the last 14 days,
+     * highest first. Empty if the user hasn't granted Usage Access - callers should just omit
+     * the group in that case rather than show it empty.
+     */
+    fun suggestedApps(apps: List<LauncherAppEntry>, limit: Int = 8): List<LauncherAppEntry> {
+        val usage = usageTimeByPackage()
+        if (usage.isEmpty()) return emptyList()
+        return apps.sortedByDescending { usage[it.packageName] ?: 0L }
+            .filter { (usage[it.packageName] ?: 0L) > 0L }
+            .take(limit)
+    }
+
     private fun orderForFirstLaunch(apps: List<LauncherAppEntry>): List<LauncherAppEntry> {
         val usage = usageTimeByPackage()
         if (usage.isNotEmpty()) {
