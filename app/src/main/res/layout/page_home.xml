@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- One home page. Replaces both page_home_plain.xml and page_home_with_widget.xml. -->
-<com.example.launcherapp.ui.views.HomeCellLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.example.launcherapp.views.HomeCellLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pageCells"
     android:layout_width="match_parent"
     android:layout_height="match_parent"

@@ -57,7 +57,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
-        <!-- Page dots sit exactly where the pill is; they only fade in while swiping. -->
+        <!-- Page dots sit exactly where the pill is; they show while swiping. -->
         <LinearLayout
             android:id="@+id/pageIndicator"
             android:layout_width="wrap_content"
@@ -70,7 +70,8 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="@id/searchPill" />
 
-        <!-- Dock: 60dp icons + 16dp vertical padding = 92dp tall, like the Figma dock -->
+        <!-- Dock: 60dp icons + 16dp vertical padding = 92dp tall, like the Figma dock.
+             minHeight keeps its size while an icon is dragged out of it. -->
         <LinearLayout
             android:id="@+id/dock"
             android:layout_width="0dp"
@@ -81,6 +82,7 @@
             android:background="@drawable/home_dock_background"
             android:baselineAligned="false"
             android:gravity="center_vertical"
+            android:minHeight="92dp"
             android:orientation="horizontal"
             android:paddingStart="8dp"
             android:paddingTop="16dp"
@@ -91,5 +93,32 @@
             app:layout_constraintStart_toStartOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Overlay for the floating icon while dragging. Not clickable, so touches pass through. -->
+    <FrameLayout
+        android:id="@+id/dragLayer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!--
+        Shown until the first app list / layout load finishes, so the user never sees the
+        half-built page (widget with no apps, empty dock) while loadHomeInBackground() runs.
+        Visible by default; LauncherHomeActivity hides it once loading completes.
+    -->
+    <FrameLayout
+        android:id="@+id/loadingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#33000000"
+        android:clickable="true"
+        android:focusable="true">
+
+        <ProgressBar
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="@android:color/white" />
+
+    </FrameLayout>
 
 </FrameLayout>

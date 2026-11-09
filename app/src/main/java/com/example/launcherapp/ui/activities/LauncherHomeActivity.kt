@@ -2,15 +2,22 @@ package com.example.launcherapp.ui.activities
 
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.pm.LauncherApps
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
 import android.provider.AlarmClock
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.view.animation.Animation
+import android.view.animation.RotateAnimation
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -20,33 +27,70 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityLauncherHomeBinding
+import com.example.launcherapp.utils.DragController
+import com.example.launcherapp.ui.model.HomeGrid
+import com.example.launcherapp.Repositories.HomeLayoutRepository
+import com.example.launcherapp.ui.model.HomeModel
+import com.example.launcherapp.Repositories.defaultHandlerPackage
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
-import com.example.launcherapp.ui.views.HomeCellLayout
+import com.example.launcherapp.views.HomeCellLayout
 import kotlin.concurrent.thread
+import kotlin.random.Random
+import java.util.WeakHashMap
 
-/** Grid geometry shared by the activity (page chunking) and the pager adapter (cell placement). */
-private object HomeGrid {
-    const val COLUMNS = 4
-    const val ROWS = 6
-    const val WIDGET_SPAN = 2
-
-    const val PAGE_CAPACITY = COLUMNS * ROWS                                   // 24
-    const val FIRST_PAGE_CAPACITY = PAGE_CAPACITY - WIDGET_SPAN * WIDGET_SPAN  // 20
-}
-
-class LauncherHomeActivity : AppCompatActivity() {
+class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     private lateinit var binding: ActivityLauncherHomeBinding
     private lateinit var iosIcons: IosIconProvider
     private lateinit var iconShaper: IconShaper
+    private lateinit var layoutRepository: HomeLayoutRepository
+    private lateinit var dragController: DragController
+    private lateinit var pagerAdapter: RecyclerView.Adapter<*>
+
+    /** Current arrangement: which app is on which page / in the dock. */
+    override var model = HomeModel(mutableListOf(), mutableListOf())
+        private set
+
+    private var appsByKey: Map<String, LauncherAppEntry> = emptyMap()
+
+    // Touch bookkeeping for drag & drop
+    private var lastTouchRawX = 0f
+    private var lastTouchRawY = 0f
+    private var dragTouchCancelled = false
+
+    // Reloading when apps are installed / removed
+    private var pendingReload = false
+    private var layoutGeneration = 0 // bumped on every user change, so a stale reload can't overwrite it
+    private val reloadRunnable = Runnable { loadHomeInBackground() }
+    private val launcherApps by lazy { getSystemService(LauncherApps::class.java) }
+    private val packageCallback = object : LauncherApps.Callback() {
+        override fun onPackageAdded(packageName: String, user: UserHandle) = scheduleReload()
+        override fun onPackageRemoved(packageName: String, user: UserHandle) = scheduleReload()
+        override fun onPackageChanged(packageName: String, user: UserHandle) = scheduleReload()
+        override fun onPackagesAvailable(packageNames: Array<out String>, user: UserHandle, replacing: Boolean) =
+            scheduleReload()
+        override fun onPackagesUnavailable(packageNames: Array<out String>, user: UserHandle, replacing: Boolean) =
+            scheduleReload()
+    }
+
+    private var pageDots: List<View> = emptyList()
     private val restoreSearchPill = Runnable { showSearchPill(true) }
+
+    /**
+     * Which view currently represents each app key, per page. This is the single source of
+     * truth for reuse/cleanup in [renderPage] - we never rebuild it by scanning the ViewGroup's
+     * children, so it can't drift from what's actually attached (the cause of ghost icons).
+     */
+    private val pageViews = WeakHashMap<HomeCellLayout, LinkedHashMap<String, View>>()
+    private fun viewsFor(cells: HomeCellLayout) = pageViews.getOrPut(cells) { LinkedHashMap() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Transparent status + navigation bars with white icons, content drawn edge to edge.
@@ -61,38 +105,414 @@ class LauncherHomeActivity : AppCompatActivity() {
 
         iosIcons = IosIconProvider(this)
         iconShaper = IconShaper(this)
-        loadHomeInBackground()
+        layoutRepository = HomeLayoutRepository(this)
+        dragController = DragController(binding.homePager, binding.dock, binding.dragLayer, this)
 
-        // A launcher must never close on Back - jump to the first page instead.
+        setupPager()
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                binding.homePager.setCurrentItem(0, true)
+                // A launcher must never close on Back.
+                if (dragController.isDragging) {
+                    dragController.cancelDrag()
+                } else {
+                    binding.homePager.setCurrentItem(0, true)
+                }
             }
         })
+
+        launcherApps?.registerCallback(packageCallback, Handler(Looper.getMainLooper()))
+        loadHomeInBackground()
+    }
+
+    override fun onDestroy() {
+        launcherApps?.unregisterCallback(packageCallback)
+        binding.root.removeCallbacks(reloadRunnable)
+        binding.root.removeCallbacks(restoreSearchPill)
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Pressing Home while already on the home screen returns to page 1, like iOS.
-        if (intent.action == Intent.ACTION_MAIN) binding.homePager.setCurrentItem(0, true)
+        // Home pressed while already on the home screen.
+        if (intent.action == Intent.ACTION_MAIN) {
+            if (dragController.isDragging) dragController.cancelDrag()
+            binding.homePager.setCurrentItem(0, true)
+        }
     }
 
     /**
-     * Loading + reshaping ~100 icons takes a moment, so it runs off the main thread;
-     * the wallpaper shows immediately and the grid + dock appear once ready.
+     * While an icon is being dragged, every touch goes to the drag controller.
+     * The views underneath get one CANCEL so pressed states / long-press timers are cleared.
+     */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        lastTouchRawX = event.rawX
+        lastTouchRawY = event.rawY
+        if (::dragController.isInitialized && dragController.isDragging) {
+            if (!dragTouchCancelled) {
+                val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
+                super.dispatchTouchEvent(cancel)
+                cancel.recycle()
+                dragTouchCancelled = true
+            }
+            dragController.onTouchEvent(event)
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Loading
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Loads apps + icons off the main thread, merges them with the saved layout and shows them.
+     * Also used to refresh after an app is installed or removed.
      */
     private fun loadHomeInBackground() {
+        val generation = layoutGeneration
         thread(name = "launcher-load-apps") {
-            val pages = chunkIntoPages(loadLaunchableApps())
-            val dockApps = loadDockApps()
+            val apps = loadLaunchableApps()
+            val loaded = layoutRepository.load(apps, defaultDockPackages())
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                binding.homePager.adapter = HomePagerAdapter(pages, ::launchApp, ::openClockApp)
-                setupPageIndicator(pages.size)
-                showDock(dockApps)
+                if (dragController.isDragging) {
+                    pendingReload = true
+                    return@runOnUiThread
+                }
+                if (generation != layoutGeneration) {
+                    // The user moved something while we were loading - load again on top of that.
+                    scheduleReload()
+                    return@runOnUiThread
+                }
+                appsByKey = apps.associateBy { it.key }
+                model = loaded
+                layoutRepository.save(model)
+
+                pagerAdapter.notifyDataSetChanged()
+                if (binding.homePager.currentItem > model.pages.lastIndex) {
+                    binding.homePager.setCurrentItem(model.pages.lastIndex, false)
+                }
+                rebuildPageDots()
+                refreshDock()
+                hideLoadingOverlay()
             }
         }
     }
+
+    /** Fades out the first-load spinner. A no-op on later reloads, since it's already gone. */
+    private fun hideLoadingOverlay() {
+        val overlay = binding.loadingOverlay
+        if (!overlay.isVisible) return
+        overlay.animate()
+            .alpha(0f)
+            .setDuration(OVERLAY_FADE_MS)
+            .withEndAction { overlay.isVisible = false }
+            .start()
+    }
+
+    private fun scheduleReload() {
+        if (::dragController.isInitialized && dragController.isDragging) {
+            pendingReload = true
+            return
+        }
+        binding.root.removeCallbacks(reloadRunnable)
+        binding.root.postDelayed(reloadRunnable, RELOAD_DELAY_MS)
+    }
+
+    private fun loadLaunchableApps(): List<LauncherAppEntry> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return packageManager.queryIntentActivities(intent, 0)
+            .map { info ->
+                val packageName = info.activityInfo.packageName
+                LauncherAppEntry(
+                    label = info.loadLabel(packageManager).toString(),
+                    icon = homeIcon(packageName) { info.loadIcon(packageManager) },
+                    packageName = packageName,
+                    activityName = info.activityInfo.name,
+                    installTime = installTimeOf(packageName)
+                )
+            }
+            .sortedBy { it.label.lowercase() }
+    }
+
+    private fun installTimeOf(packageName: String): Long =
+        runCatching { packageManager.getPackageInfo(packageName, 0).firstInstallTime }.getOrDefault(0L)
+
+    /** Packages used for the dock the very first time (after that the user's own dock is saved). */
+    private fun defaultDockPackages(): List<String> = listOfNotNull(
+        packageManager.defaultHandlerPackage(Intent(Intent.ACTION_DIAL)),
+        packageManager.defaultHandlerPackage(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER)),
+        packageManager.defaultHandlerPackage(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)),
+        packageManager.defaultHandlerPackage(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC))
+    )
+
+    /** iOS replacement icon if we have one for this app, otherwise the app's own icon - always squircle-shaped. */
+    private fun homeIcon(packageName: String, original: () -> Drawable): Drawable =
+        iconShaper.shape(iosIcons.iconFor(packageName) ?: original())
+
+    // ---------------------------------------------------------------------------------------
+    // Pages
+    // ---------------------------------------------------------------------------------------
+
+    private fun setupPager() {
+        pagerAdapter = HomePagerAdapter(
+            bindPage = { cells, page -> renderPage(cells, page, rebuild = true) },
+            pageCount = { model.pages.size }
+        )
+        binding.homePager.adapter = pagerAdapter
+        // No cross-fade when a page is refreshed - icons slide instead (see HomeCellLayout).
+        (binding.homePager.getChildAt(0) as? RecyclerView)?.itemAnimator = null
+
+        binding.homePager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) = updatePageDots(position)
+
+            override fun onPageScrollStateChanged(state: Int) {
+                // iOS: the "Search" pill turns into page dots while swiping.
+                binding.root.removeCallbacks(restoreSearchPill)
+                if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                    binding.root.postDelayed(restoreSearchPill, 700)
+                } else {
+                    showSearchPill(false)
+                }
+            }
+        })
+    }
+
+    /**
+     * Draws one page from the model (or from the drag preview, which has an empty slot where
+     * the dragged icon would land). With [rebuild] = false existing views are reused and only
+     * moved (see [viewsFor]), and [animateMoves] slides them smoothly to their new spot instead
+     * of just snapping - the iOS rearrange feel, without ever re-deriving "what's on screen" by
+     * scanning the ViewGroup.
+     */
+    private fun renderPage(cells: HomeCellLayout, page: Int, rebuild: Boolean) {
+        val views = viewsFor(cells)
+        if (rebuild) {
+            cells.removeAllViews()
+            views.clear()
+        }
+
+        val keys: List<String?> = dragController.previewPage(page) ?: model.pages.getOrNull(page).orEmpty()
+        val wanted = HashSet<String>()
+        val startPositions: Map<String, Pair<Int, Int>> =
+            if (rebuild) emptyMap() else views.mapValues { (_, v) -> v.left to v.top }
+
+        // Page 1: clock widget occupies the top-left 2x2 block.
+        if (page == 0) {
+            wanted += CLOCK_WIDGET_KEY
+            val widget = views[CLOCK_WIDGET_KEY] ?: createClockWidget(cells).also {
+                cells.addView(
+                    it,
+                    HomeCellLayout.LayoutParams(
+                        cellX = 0,
+                        cellY = 0,
+                        spanX = HomeGrid.WIDGET_SPAN,
+                        spanY = HomeGrid.WIDGET_SPAN,
+                        isWidget = true,
+                        key = CLOCK_WIDGET_KEY
+                    )
+                )
+                views[CLOCK_WIDGET_KEY] = it
+            }
+            applyWiggle(widget)
+        }
+
+        // Apps fill the free cells in order; a null key is the empty slot of the drag preview.
+        val slots = cells.iconCells()
+        keys.take(slots.size).forEachIndexed { index, key ->
+            if (key == null) return@forEachIndexed
+            val app = appsByKey[key] ?: return@forEachIndexed
+            wanted += key
+            val (x, y) = slots[index]
+            val cell = views[key] ?: createAppCell(cells, app).also {
+                cells.addView(it, HomeCellLayout.LayoutParams(x, y, key = key))
+                views[key] = it
+            }
+            (cell.layoutParams as HomeCellLayout.LayoutParams).apply {
+                cellX = x
+                cellY = y
+            }
+            applyWiggle(cell)
+        }
+
+        // Views we own but no longer want: drop from the layout and the registry together, so
+        // the registry can never point at something that isn't actually attached (or vice versa).
+        val iterator = views.entries.iterator()
+        while (iterator.hasNext()) {
+            val (key, view) = iterator.next()
+            if (key !in wanted) {
+                cells.removeView(view)
+                iterator.remove()
+            }
+        }
+
+        if (startPositions.isNotEmpty()) animateMoves(cells, views, startPositions)
+        cells.requestLayout()
+    }
+
+    /**
+     * Slides each reused icon from where it was to where it's about to land, instead of letting
+     * it jump. Classic FLIP technique: let the layout pass happen first (so every view already
+     * has its final position), then on the next frame compute the delta from the old position,
+     * pre-offset the view by that delta, and animate the offset back to zero.
+     */
+    private fun animateMoves(cells: HomeCellLayout, views: Map<String, View>, startPositions: Map<String, Pair<Int, Int>>) {
+        cells.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                cells.viewTreeObserver.removeOnPreDrawListener(this)
+                views.forEach { (key, view) ->
+                    val (startLeft, startTop) = startPositions[key] ?: return@forEach
+                    val dx = (startLeft - view.left).toFloat()
+                    val dy = (startTop - view.top).toFloat()
+                    if (dx != 0f || dy != 0f) {
+                        view.translationX = dx
+                        view.translationY = dy
+                        view.animate().translationX(0f).translationY(0f).setDuration(MOVE_DURATION_MS).start()
+                    }
+                }
+                return true
+            }
+        })
+    }
+
+    private fun createAppCell(parent: ViewGroup, app: LauncherAppEntry): View {
+        val cell = layoutInflater.inflate(R.layout.item_home_app, parent, false)
+        val icon = cell.findViewById<ImageView>(R.id.appIcon)
+        icon.setImageDrawable(app.icon)
+        cell.findViewById<TextView>(R.id.appLabel).text = app.label
+        cell.contentDescription = app.label
+        attachIconInteractions(touchTarget = cell, iconView = icon, key = app.key)
+        return cell
+    }
+
+    private fun createClockWidget(parent: ViewGroup): View =
+        layoutInflater.inflate(R.layout.item_home_clock_widget, parent, false).apply {
+            setOnClickListener { openClockApp() }
+        }
+
+    // ---------------------------------------------------------------------------------------
+    // Dock
+    // ---------------------------------------------------------------------------------------
+
+    override fun refreshDock() {
+        val keys: List<String?> = dragController.previewDock() ?: model.dock
+        binding.dock.removeAllViews()
+        keys.forEach { key ->
+            // Each slot is a weighted FrameLayout (see item_dock_app.xml), so icons are spread evenly.
+            val slot = layoutInflater.inflate(R.layout.item_dock_app, binding.dock, false)
+            val icon = slot.findViewById<ImageView>(R.id.dockAppIcon)
+            val app = key?.let { appsByKey[it] }
+            if (app == null) {
+                icon.visibility = View.INVISIBLE // empty slot of the drag preview
+            } else {
+                icon.setImageDrawable(app.icon)
+                icon.contentDescription = app.label
+                attachIconInteractions(touchTarget = icon, iconView = icon, key = app.key)
+                applyWiggle(icon)
+            }
+            binding.dock.addView(slot)
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Drag & drop
+    // ---------------------------------------------------------------------------------------
+
+    /** Tap opens the app. Long-press picks the icon up and drags it directly - no separate mode. */
+    private fun attachIconInteractions(touchTarget: View, iconView: View, key: String) {
+        touchTarget.setOnClickListener {
+            appsByKey[key]?.let(::launchApp)
+        }
+        touchTarget.setOnLongClickListener {
+            if (dragController.isDragging) return@setOnLongClickListener false
+            startDrag(key, iconView, lastTouchRawX, lastTouchRawY)
+            true
+        }
+    }
+
+    private fun startDrag(key: String, iconView: View, rawX: Float, rawY: Float) {
+        dragTouchCancelled = false
+        dragController.startDrag(key, iconView, rawX, rawY)
+    }
+
+    /** iOS "jiggle": a small endless rotation, each icon starting at a random moment - while a drag is active. */
+    private fun applyWiggle(view: View) {
+        if (dragController.isDragging) {
+            if (view.animation == null) {
+                view.startAnimation(
+                    RotateAnimation(
+                        -WIGGLE_DEGREES, WIGGLE_DEGREES,
+                        Animation.RELATIVE_TO_SELF, 0.5f,
+                        Animation.RELATIVE_TO_SELF, 0.5f
+                    ).apply {
+                        duration = WIGGLE_DURATION_MS
+                        repeatMode = Animation.REVERSE
+                        repeatCount = Animation.INFINITE
+                        startOffset = Random.nextLong(WIGGLE_DURATION_MS)
+                    }
+                )
+            }
+        } else if (view.animation != null) {
+            view.clearAnimation()
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // DragController.Host
+    // ---------------------------------------------------------------------------------------
+
+    override fun appIcon(key: String): Drawable? = appsByKey[key]?.icon
+
+    override fun pageCells(page: Int): HomeCellLayout? {
+        val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return null
+        return (recycler.findViewHolderForAdapterPosition(page) as? HomePagerAdapter.PageViewHolder)?.cells
+    }
+
+    override fun refreshPage(page: Int) {
+        pageCells(page)?.let { renderPage(it, page, rebuild = false) }
+    }
+
+    override fun onPageCountChanged() {
+        pagerAdapter.notifyDataSetChanged()
+        rebuildPageDots()
+    }
+
+    override fun onDragFinished(changed: Boolean) {
+        dragTouchCancelled = false
+        if (model.trimEmptyPages()) {
+            pagerAdapter.notifyDataSetChanged()
+            rebuildPageDots()
+            if (binding.homePager.currentItem > model.pages.lastIndex) {
+                binding.homePager.setCurrentItem(model.pages.lastIndex, false)
+            }
+        } else {
+            refreshAllPages()
+        }
+        refreshDock()
+
+        if (changed) {
+            layoutGeneration++
+            layoutRepository.save(model)
+        }
+        if (pendingReload) {
+            pendingReload = false
+            scheduleReload()
+        }
+    }
+
+    private fun refreshAllPages() {
+        val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return
+        for (i in 0 until recycler.childCount) {
+            val holder = recycler.getChildViewHolder(recycler.getChildAt(i)) as? HomePagerAdapter.PageViewHolder ?: continue
+            val page = holder.bindingAdapterPosition
+            if (page != RecyclerView.NO_POSITION) renderPage(holder.cells, page, rebuild = false)
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Search pill / page dots / insets
+    // ---------------------------------------------------------------------------------------
 
     /**
      * Wallpaper stays full-bleed; only the content is pushed out from under the system bars.
@@ -109,50 +529,16 @@ class LauncherHomeActivity : AppCompatActivity() {
         }
     }
 
-    /** iOS replacement icon if we have one for this app, otherwise the app's own icon - always squircle-shaped. */
-    private fun homeIcon(packageName: String, original: () -> Drawable): Drawable =
-        iconShaper.shape(iosIcons.iconFor(packageName) ?: original())
-
-    private fun loadLaunchableApps(): List<LauncherAppEntry> {
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return packageManager.queryIntentActivities(intent, 0)
-            .map { info ->
-                val packageName = info.activityInfo.packageName
-                LauncherAppEntry(
-                    label = info.loadLabel(packageManager).toString(),
-                    icon = homeIcon(packageName) { info.loadIcon(packageManager) },
-                    packageName = packageName,
-                    activityName = info.activityInfo.name
-                )
-            }
-            .sortedBy { it.label.lowercase() }
-    }
-
-    private fun chunkIntoPages(apps: List<LauncherAppEntry>): List<List<LauncherAppEntry>> {
-        if (apps.isEmpty()) return listOf(emptyList())
-        val pages = mutableListOf<List<LauncherAppEntry>>()
-        var index = 0
-        while (index < apps.size) {
-            val capacity = if (pages.isEmpty()) HomeGrid.FIRST_PAGE_CAPACITY else HomeGrid.PAGE_CAPACITY
-            val end = minOf(index + capacity, apps.size)
-            pages.add(apps.subList(index, end))
-            index = end
-        }
-        return pages
-    }
-
-    /**
-     * iOS behaviour: the "Search" pill is shown while idle; while the user swipes between pages
-     * it cross-fades into the page dots, then fades back shortly after the swipe settles.
-     */
-    private fun setupPageIndicator(pageCount: Int) {
+    private fun rebuildPageDots() {
         val indicator = binding.pageIndicator
         indicator.removeAllViews()
-        indicator.alpha = 0f
-        if (pageCount <= 1) return
-
+        val pageCount = model.pages.size
+        if (pageCount <= 1) {
+            pageDots = emptyList()
+            return
+        }
         val density = resources.displayMetrics.density
-        val dots = (0 until pageCount).map { index ->
+        pageDots = (0 until pageCount).map {
             View(this).apply {
                 val size = (7 * density).toInt()
                 layoutParams = LinearLayout.LayoutParams(size, size).apply {
@@ -160,25 +546,14 @@ class LauncherHomeActivity : AppCompatActivity() {
                     marginEnd = (4.5f * density).toInt()
                 }
                 setBackgroundResource(R.drawable.dot_shape)
-                alpha = if (index == 0) 1f else 0.35f
             }
         }
-        dots.forEach(indicator::addView)
+        pageDots.forEach(indicator::addView)
+        updatePageDots(binding.homePager.currentItem)
+    }
 
-        binding.homePager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                dots.forEachIndexed { index, dot -> dot.alpha = if (index == position) 1f else 0.35f }
-            }
-
-            override fun onPageScrollStateChanged(state: Int) {
-                binding.root.removeCallbacks(restoreSearchPill)
-                if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                    binding.root.postDelayed(restoreSearchPill, 700)
-                } else {
-                    showSearchPill(false)
-                }
-            }
-        })
+    private fun updatePageDots(position: Int) {
+        pageDots.forEachIndexed { index, dot -> dot.alpha = if (index == position) 1f else 0.35f }
     }
 
     private fun showSearchPill(show: Boolean) {
@@ -186,63 +561,12 @@ class LauncherHomeActivity : AppCompatActivity() {
         binding.pageIndicator.animate().alpha(if (show) 0f else 1f).setDuration(160).start()
     }
 
-    private fun loadDockApps(): List<LauncherAppEntry> = listOfNotNull(
-        resolveForIntent(Intent(Intent.ACTION_DIAL)),
-        resolveForCategory(Intent.CATEGORY_APP_BROWSER),
-        resolveForCategory(Intent.CATEGORY_APP_MESSAGING),
-        resolveForCategory(Intent.CATEGORY_APP_MUSIC)
-    )
-
-    private fun showDock(dockApps: List<LauncherAppEntry>) {
-        binding.dock.removeAllViews()
-        dockApps.forEach { app ->
-            // Each slot is a weighted FrameLayout (see item_dock_app.xml), so the 60dp icons
-            // are spread evenly without being stretched.
-            val slot = layoutInflater.inflate(R.layout.item_dock_app, binding.dock, false)
-            slot.findViewById<ImageView>(R.id.dockAppIcon).apply {
-                setImageDrawable(app.icon)
-                contentDescription = app.label
-                setOnClickListener { launchApp(app) }
-            }
-            binding.dock.addView(slot)
-        }
-    }
-
-    /**
-     * Resolves the default handler for [intent], but reports the resolved app's own
-     * launcher icon/label rather than the matched activity's icon - the activity that
-     * answers e.g. ACTION_DIAL is often an internal component with a plain/generic icon,
-     * while the app's launcher icon is the one users actually recognize.
-     *
-     * If the user never picked a default, Android resolves to its own "Open with" chooser
-     * (package "android"); in that case the first real handler is used instead, so the dock
-     * never shows the generic system icon.
-     */
-    private fun resolveForIntent(intent: Intent): LauncherAppEntry? {
-        val resolved = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) ?: return null
-        val activityInfo = resolved.activityInfo.takeIf { it.packageName != SYSTEM_PACKAGE }
-            ?: packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                .firstOrNull { it.activityInfo.packageName != SYSTEM_PACKAGE }
-                ?.activityInfo
-            ?: return null
-
-        val packageName = activityInfo.packageName
-        val appInfo = runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
-            ?: return null
-        return LauncherAppEntry(
-            label = packageManager.getApplicationLabel(appInfo).toString(),
-            icon = homeIcon(packageName) { packageManager.getApplicationIcon(appInfo) },
-            packageName = packageName,
-            activityName = activityInfo.name,
-            launchIntent = Intent(intent).setPackage(packageName)
-        )
-    }
-
-    private fun resolveForCategory(category: String): LauncherAppEntry? =
-        resolveForIntent(Intent(Intent.ACTION_MAIN).addCategory(category))
+    // ---------------------------------------------------------------------------------------
+    // Launching
+    // ---------------------------------------------------------------------------------------
 
     private fun launchApp(app: LauncherAppEntry) {
-        // Copy, so the shared dock intent is never mutated.
+        // Copy, so a shared intent is never mutated.
         val intent = app.launchIntent?.let { Intent(it) } ?: Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
             component = ComponentName(app.packageName, app.activityName)
@@ -251,22 +575,38 @@ class LauncherHomeActivity : AppCompatActivity() {
         runCatching { startActivity(intent) } // app may have been uninstalled since loading
     }
 
+    /**
+     * Opens the real installed Clock app - same one that answers ACTION_SHOW_ALARMS, but
+     * launched via its own launcher entry (like tapping its icon) instead of firing that action
+     * directly, which can resolve to an unrelated app if more than one handles it and the user
+     * never picked a default.
+     */
     private fun openClockApp() {
-        runCatching {
-            startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val clockPackage = packageManager.defaultHandlerPackage(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+        val clockApp = appsByKey.values.firstOrNull { it.packageName == clockPackage }
+        if (clockApp != null) {
+            launchApp(clockApp)
+        } else {
+            runCatching {
+                startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
         }
     }
 
     companion object {
         private const val TAG = "LauncherHome"
-        private const val SYSTEM_PACKAGE = "android"
+        private const val CLOCK_WIDGET_KEY = "#clock_widget"
+        private const val RELOAD_DELAY_MS = 400L
+        private const val WIGGLE_DEGREES = 1.8f
+        private const val WIGGLE_DURATION_MS = 130L
+        private const val MOVE_DURATION_MS = 220L
+        private const val OVERLAY_FADE_MS = 200L
     }
 }
 
 private class HomePagerAdapter(
-    private val pages: List<List<LauncherAppEntry>>,
-    private val onAppClick: (LauncherAppEntry) -> Unit,
-    private val onClockClick: () -> Unit
+    private val bindPage: (HomeCellLayout, Int) -> Unit,
+    private val pageCount: () -> Int
 ) : RecyclerView.Adapter<HomePagerAdapter.PageViewHolder>() {
 
     class PageViewHolder(val cells: HomeCellLayout) : RecyclerView.ViewHolder(cells)
@@ -280,40 +620,8 @@ private class HomePagerAdapter(
     }
 
     override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
-        val cells = holder.cells
-        val inflater = LayoutInflater.from(cells.context)
-        cells.removeAllViews()
-
-        // Page 1: clock widget occupies the top-left 2x2 block.
-        if (position == 0) {
-            val widget = inflater.inflate(R.layout.item_home_clock_widget, cells, false)
-            widget.setOnClickListener { onClockClick() }
-            cells.addView(
-                widget,
-                HomeCellLayout.LayoutParams(
-                    cellX = 0,
-                    cellY = 0,
-                    spanX = HomeGrid.WIDGET_SPAN,
-                    spanY = HomeGrid.WIDGET_SPAN,
-                    isWidget = true
-                )
-            )
-        }
-
-        // Apps fill every remaining cell in reading order, so on page 1 the first four apps
-        // sit to the right of the widget - same as FaceTime/Calendar/Health/Wallet in Figma.
-        val freeCells = cells.freeCells().iterator()
-        for (app in pages[position]) {
-            if (!freeCells.hasNext()) break
-            val (x, y) = freeCells.next()
-            val item = inflater.inflate(R.layout.item_home_app, cells, false)
-            item.findViewById<ImageView>(R.id.appIcon).setImageDrawable(app.icon)
-            item.findViewById<TextView>(R.id.appLabel).text = app.label
-            item.contentDescription = app.label
-            item.setOnClickListener { onAppClick(app) }
-            cells.addView(item, HomeCellLayout.LayoutParams(x, y))
-        }
+        bindPage(holder.cells, position)
     }
 
-    override fun getItemCount() = pages.size
+    override fun getItemCount() = pageCount()
 }

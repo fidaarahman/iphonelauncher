@@ -63,4 +63,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     implementation("com.intuit.sdp:sdp-android:1.1.0")
     implementation("com.intuit.ssp:ssp-android:1.1.0")
+
+    implementation("com.google.code.gson:gson:2.11.0")
 }
