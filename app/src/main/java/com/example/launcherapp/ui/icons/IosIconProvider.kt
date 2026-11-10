@@ -68,7 +68,7 @@ class IosIconProvider(private val context: Context) {
         context.resources.getIdentifier(name, "drawable", context.packageName)
 
     private fun roleIcons(): List<Pair<Intent, String>> = listOf(
-        Intent(Intent.ACTION_DIAL) to "ic_phone",
+        Intent(Intent.ACTION_DIAL) to "ic_phone_bottom_contianer",
         category(Intent.CATEGORY_APP_MESSAGING) to "ic_messages",
         // CATEGORY_APP_BROWSER isn't reliably declared by every browser, so match via a plain
         // http VIEW intent instead - every browser must handle that, by definition.

@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -33,6 +38,9 @@
             android:name=".ui.activities.MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.activities.ControlCenterActivity"
+            android:exported="false" />
         <activity
             android:name=".ui.activities.LauncherHomeActivity"
             android:exported="true"

@@ -29,6 +29,10 @@ class DragController(
         fun refreshDock()
         fun onPageCountChanged()
         fun onDragFinished(changed: Boolean)
+        /** Pager adapter position for home-page index [page] (pages aren't always 1:1 with position - e.g. a widgets page can sit in between). */
+        fun pagePosition(page: Int): Int
+        /** Home-page index showing at pager position [position], or null if that position isn't a home page at all. */
+        fun pageForPosition(position: Int): Int?
     }
 
     private sealed interface Hover {
@@ -178,7 +182,7 @@ class DragController(
     private fun hoverAt(rawX: Float, rawY: Float): Hover? {
         if (isInside(dock, rawX, rawY)) return dockHoverAt(rawX)
 
-        val page = pager.currentItem
+        val page = host.pageForPosition(pager.currentItem) ?: return null // on the widgets/library page
         val keepCurrent = (hover as? Hover.Page)?.takeIf { it.page == page }
         val cells = host.pageCells(page) ?: return keepCurrent
         val cellsLocation = IntArray(2)
@@ -222,7 +226,8 @@ class DragController(
         pendingFlip = 0
         if (!isDragging || direction == 0) return
 
-        val target = pager.currentItem + direction
+        val currentPage = host.pageForPosition(pager.currentItem) ?: return
+        val target = currentPage + direction
         if (target < 0) return
         val model = host.model
         if (target >= model.pages.size) {
@@ -235,7 +240,7 @@ class DragController(
         val oldHover = hover
         hover = null
         refreshHover(oldHover)
-        pager.setCurrentItem(target, true)
+        pager.setCurrentItem(host.pagePosition(target), true)
         dragLayer.postDelayed({
             if (isDragging) {
                 updateHover(lastRawX, lastRawY)

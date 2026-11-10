@@ -13,14 +13,6 @@ import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.R
 import com.example.launcherapp.ui.model.AppLibraryGroup
 
-/**
- * App Library tiles, like iOS:
- * - up to 4 apps: one large icon per slot;
- * - more than 4: 3 large icons + a 2x2 cluster of mini icons (apps 4-7) in the 4th slot.
- *
- * Large icons launch their app. Mini icons: if [onOpenGroup] is set, tapping the cluster opens
- * the whole group (folder overlay); until that exists, each mini icon launches its own app.
- */
 class AppLibraryAdapter(
     private val groups: List<AppLibraryGroup>,
     private val onOpenGroup: ((AppLibraryGroup) -> Unit)? = null,

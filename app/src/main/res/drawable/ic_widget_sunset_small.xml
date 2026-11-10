@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small sunset icon next to "SUNSET": half sun on the horizon with rays and a down arrow. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- horizon -->
+    <path
+        android:pathData="M2,19H22"
+        android:strokeWidth="2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+    <!-- half sun -->
+    <path
+        android:pathData="M7,16A5,5 0,0 1,17 16"
+        android:strokeWidth="2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+    <!-- rays -->
+    <path
+        android:pathData="M3.5,13.5L5,14M20.5,13.5L19,14M6,8.5L7.2,9.7M18,8.5L16.8,9.7"
+        android:strokeWidth="2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+    <!-- down arrow -->
+    <path
+        android:pathData="M12,2V8M9.5,5.5L12,8L14.5,5.5"
+        android:strokeWidth="2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

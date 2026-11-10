@@ -1,12 +1,18 @@
 package com.example.launcherapp.ui.activities
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +34,9 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -53,9 +61,12 @@ import com.example.launcherapp.Repositories.defaultHandlerPackage
 import com.example.launcherapp.ui.icons.FolderIcon
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
+import com.example.launcherapp.ui.model.SunCalculator
 import com.example.launcherapp.views.HomeCellLayout
 import kotlin.concurrent.thread
 import kotlin.random.Random
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.WeakHashMap
 
 class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
@@ -66,6 +77,12 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private lateinit var layoutRepository: HomeLayoutRepository
     private lateinit var dragController: DragController
     private lateinit var pagerAdapter: RecyclerView.Adapter<*>
+
+    // Today View widgets page
+    private var widgetPermissionsRequested = false
+    private var cachedPhotoUri: Uri? = null
+    private val requestWidgetPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refreshWidgetsPageIfAttached() }
 
     /** Current arrangement: which app is on which page / in the dock. */
     override var model = HomeModel(mutableListOf(), mutableListOf())
@@ -100,11 +117,6 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private var pageDots: List<View> = emptyList()
     private val restoreSearchPill = Runnable { showSearchPill(true) }
 
-    /**
-     * Which view currently represents each app key, per page. This is the single source of
-     * truth for reuse/cleanup in [renderPage] - we never rebuild it by scanning the ViewGroup's
-     * children, so it can't drift from what's actually attached (the cause of ghost icons).
-     */
     private val pageViews = WeakHashMap<HomeCellLayout, LinkedHashMap<String, View>>()
     private fun viewsFor(cells: HomeCellLayout) = pageViews.getOrPut(cells) { LinkedHashMap() }
 
@@ -137,7 +149,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                 } else if (dragController.isDragging) {
                     dragController.cancelDrag()
                 } else {
-                    binding.homePager.setCurrentItem(0, true)
+                    binding.homePager.setCurrentItem(positionForHomeIndex(0), true)
                 }
             }
         })
@@ -158,7 +170,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         // Home pressed while already on the home screen.
         if (intent.action == Intent.ACTION_MAIN) {
             if (dragController.isDragging) dragController.cancelDrag()
-            binding.homePager.setCurrentItem(0, true)
+            binding.homePager.setCurrentItem(positionForHomeIndex(0), true)
         }
     }
 
@@ -185,21 +197,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // ---------------------------------------------------------------------------------------
     // Loading
     // ---------------------------------------------------------------------------------------
-
-    /**
-     * Loads apps + icons off the main thread, merges them with the saved layout and shows them.
-     * Also used to refresh after an app is installed or removed.
-     */
     private fun loadHomeInBackground() {
         val generation = layoutGeneration
         thread(name = "launcher-load-apps") {
             val apps = loadLaunchableApps()
-            // Non-essential Google apps are bundled into one "Google" folder icon instead of
-            // each getting their own home-screen spot; they still exist normally everywhere else
-            // (App Library, Suggestions, search) via the untouched `apps` list below.
-            // Dock roles (Phone/Browser/Messages/Music) need the same exemption as the home-grid
-            // essentials - otherwise whichever of them resolves to a Google app (e.g. Phone ->
-            // com.google.android.dialer on this device) gets folded away, leaving the dock short.
             val dockPackages = defaultDockPackages()
             val essentials = layoutRepository.essentialPackages().toSet() + dockPackages
             val folderMembers = apps.filter {
@@ -236,10 +237,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                 layoutRepository.save(model)
 
                 pagerAdapter.notifyDataSetChanged()
-                // Valid range is 0..pages.size inclusive - the App Library sits one past the
-                // last home page, so this must not clamp someone currently viewing it.
-                if (binding.homePager.currentItem > model.pages.size) {
-                    binding.homePager.setCurrentItem(model.pages.size, false)
+                // Valid range is 0..libraryPosition() inclusive - this must not clamp someone
+                // currently viewing the App Library (or the widgets page).
+                if (binding.homePager.currentItem > libraryPosition()) {
+                    binding.homePager.setCurrentItem(libraryPosition(), false)
                 }
                 rebuildPageDots()
                 refreshDock()
@@ -291,13 +292,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             .sortedBy { it.installTime }
     }
 
-    /**
-     * App Library "Suggestions", best source first:
-     * 1. Usage Access data (your existing HomeLayoutRepository.suggestedApps - empty if not granted);
-     * 2. apps launched most from this launcher (AppLaunchTracker);
-     * 3. on a fresh install: the default phone, messages, browser, camera, gallery, settings, clock.
-     * 2 and 3 are combined so the tile is full even after only a few launches.
-     */
+
     private fun suggestionsFor(apps: List<LauncherAppEntry>): List<LauncherAppEntry> {
         val ownPackage = packageName
         val fromUsage = layoutRepository.suggestedApps(apps).filter { it.packageName != ownPackage }
@@ -308,11 +303,6 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             .take(SUGGESTIONS_COUNT)
     }
 
-    /**
-     * CATEGORY_APP_BROWSER isn't reliably declared by every browser (especially OEM/third-party
-     * ones), so resolving a plain http VIEW intent - which every browser must handle - finds the
-     * real default far more consistently.
-     */
     private fun browserIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("http://"))
 
     private fun defaultSuggestions(apps: List<LauncherAppEntry>): List<LauncherAppEntry> = listOf(
@@ -347,26 +337,53 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // Pages
     // ---------------------------------------------------------------------------------------
 
+
+    private fun widgetsPosition() = 0
+    private fun libraryPosition() = model.pages.size + 1
+
+    private fun positionForHomeIndex(index: Int) = index + 1
+
+    /** Null if [position] is the widgets or App Library page (not a home page at all). */
+    private fun homeIndexForPosition(position: Int): Int? = when {
+        position == widgetsPosition() || position == libraryPosition() -> null
+        else -> position - 1
+    }
+
+    private fun viewTypeForPosition(position: Int) = when (position) {
+        widgetsPosition() -> HomePagerAdapter.VIEW_TYPE_WIDGETS
+        libraryPosition() -> HomePagerAdapter.VIEW_TYPE_LIBRARY
+        else -> HomePagerAdapter.VIEW_TYPE_HOME
+    }
+
     private fun setupPager() {
         pagerAdapter = HomePagerAdapter(
-            bindPage = { cells, page -> renderPage(cells, page, rebuild = true) },
-            pageCount = { model.pages.size },
-            bindLibrary = ::bindLibraryPage
+            bindPage = { cells, homeIndex -> renderPage(cells, homeIndex, rebuild = true) },
+            bindWidgets = ::bindWidgetsPage,
+            bindLibrary = ::bindLibraryPage,
+            itemCount = { model.pages.size + 2 },
+            viewTypeFor = ::viewTypeForPosition,
+            homeIndexFor = { position -> homeIndexForPosition(position) ?: 0 }
         )
         binding.homePager.adapter = pagerAdapter
+        // Lands on the real home page 1, not the widgets page that now sits before it.
+        binding.homePager.setCurrentItem(positionForHomeIndex(0), false)
         // No cross-fade when a page is refreshed - icons slide instead (see HomeCellLayout).
         (binding.homePager.getChildAt(0) as? RecyclerView)?.itemAnimator = null
 
         binding.homePager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
-                updatePageDots(position)
-                // The App Library has no page dot and no dock/search pill, like iOS.
-                val onLibraryPage = position == model.pages.size
-                binding.pageIndicator.isVisible = !onLibraryPage
+                updatePageDots(homeIndexForPosition(position) ?: -1)
+                // Neither the App Library nor the widgets page has a page dot, dock, or search
+                // pill - the widgets page has its own embedded search bar instead, same as iOS
+                // hides the dock on Today View.
+                val onLibraryPage = position == libraryPosition()
+                val onWidgetsPage = position == widgetsPosition()
+                val hideChrome = onLibraryPage || onWidgetsPage
+                binding.pageIndicator.isVisible = !hideChrome
                 // Faded-out dock/pill are made INVISIBLE too: they sit on top of the library now that
                 // the pager is full height, and invisible-but-clickable icons would steal its taps.
-                fadeTo(binding.dock, visible = !onLibraryPage)
-                if (onLibraryPage) {
+                fadeTo(binding.dock, visible = !hideChrome)
+                if (hideChrome) {
                     binding.root.removeCallbacks(restoreSearchPill)
                     fadeTo(binding.searchPill, visible = false)
                 } else if (!binding.searchPill.isVisible) {
@@ -375,7 +392,8 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             }
 
             override fun onPageScrollStateChanged(state: Int) {
-                if (binding.homePager.currentItem == model.pages.size) return // App Library: no pill/dots to swap
+                // App Library / widgets page: no pill/dots to swap.
+                if (binding.homePager.currentItem == libraryPosition() || binding.homePager.currentItem == widgetsPosition()) return
                 // iOS: the "Search" pill turns into page dots while swiping.
                 binding.root.removeCallbacks(restoreSearchPill)
                 if (state == ViewPager2.SCROLL_STATE_IDLE) {
@@ -387,24 +405,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         })
     }
 
-    /**
-     * Draws one page from the model (or from the drag preview, which has an empty slot where
-     * the dragged icon would land). With [rebuild] = false existing views are reused and only
-     * moved (see [viewsFor]), and [animateMoves] slides them smoothly to their new spot instead
-     * of just snapping - the iOS rearrange feel, without ever re-deriving "what's on screen" by
-     * scanning the ViewGroup.
-     */
-    /**
-     * The pager is full height (so the App Library reaches the bottom of the screen). Home pages
-     * get this much bottom padding so their icons stay above the search pill and dock, exactly
-     * where they were before. Measured from the real layout, so it's right on every screen size.
-     *
-     * Seeded with a generous guess (dock + pill + their margins) instead of 0: the real
-     * measurement only arrives once the layout-change listener fires, and pages can render
-     * before that first firing - with 0 here, that first render would place the bottom row of
-     * icons flush against the screen edge, underneath the dock, making them unreachable until a
-     * later refresh corrected it.
-     */
+
     private var homePageBottomSpace = 0
 
     private fun watchHomePageBottomSpace() {
@@ -558,6 +559,115 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         list.adapter = AppLibraryAdapter(appLibraryGroups) { app -> launchApp(app) }
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Today View widgets page
+    // ---------------------------------------------------------------------------------------
+
+    private fun bindWidgetsPage(root: ViewGroup) {
+        bindWeatherTile(root)
+        bindBatteryTile(root)
+        bindPhotoTile(root)
+        root.findViewById<View>(R.id.wallpapersTile).setOnClickListener { openWallpaperPicker() }
+        root.findViewById<View>(R.id.controlCenterTile).setOnClickListener {
+            startActivity(Intent(this, ControlCenterActivity::class.java))
+        }
+        requestWidgetPermissionsIfNeeded()
+    }
+
+    /** Re-binds just the permission-gated tiles, after the user answers the permission prompt. */
+    private fun refreshWidgetsPageIfAttached() {
+        val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return
+        val holder = recycler.findViewHolderForAdapterPosition(widgetsPosition()) as? HomePagerAdapter.WidgetsViewHolder ?: return
+        bindWeatherTile(holder.root)
+        bindPhotoTile(holder.root)
+    }
+
+    private fun requestWidgetPermissionsIfNeeded() {
+        if (widgetPermissionsRequested) return
+        widgetPermissionsRequested = true
+        val mediaPermission =
+            if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        val needed = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, mediaPermission)
+            .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (needed.isNotEmpty()) requestWidgetPermissions.launch(needed.toTypedArray())
+    }
+
+    /** Leaves the placeholder dash in place if location access isn't granted. */
+    private fun bindWeatherTile(root: ViewGroup) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        val sunsetTime = root.findViewById<TextView>(R.id.weatherSunsetTime)
+        val sunriseTime = root.findViewById<TextView>(R.id.weatherSunriseTime)
+        thread(name = "widgets-weather") {
+            val times = lastKnownLocation()?.let { SunCalculator.calculate(it.latitude, it.longitude) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val formatter = SimpleDateFormat("h:mm a", Locale.getDefault())
+                sunsetTime.text = times?.sunset?.time?.let(formatter::format) ?: getString(R.string.widget_placeholder_dash)
+                sunriseTime.text = times?.sunrise?.time?.let { "Sunrise: ${formatter.format(it)}" } ?: ""
+            }
+        }
+    }
+
+    private fun lastKnownLocation(): Location? {
+        val locationManager = getSystemService(LocationManager::class.java) ?: return null
+        return listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.PASSIVE_PROVIDER)
+            .mapNotNull { runCatching { locationManager.getLastKnownLocation(it) }.getOrNull() }
+            .maxByOrNull { it.time }
+    }
+
+    private fun bindBatteryTile(root: ViewGroup) {
+        val level = getSystemService(BatteryManager::class.java)
+            ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+        root.findViewById<TextView>(R.id.batteryPercent).text =
+            if (level in 0..100) "$level%" else getString(R.string.widget_placeholder_dash)
+    }
+
+    /** Leaves the tile empty if media access isn't granted. */
+    private fun bindPhotoTile(root: ViewGroup) {
+        val imageView = root.findViewById<ImageView>(R.id.photoTileImage)
+        val mediaPermission =
+            if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (ContextCompat.checkSelfPermission(this, mediaPermission) != PackageManager.PERMISSION_GRANTED) {
+            imageView.isVisible = false
+            return
+        }
+        cachedPhotoUri?.let {
+            imageView.setImageURI(it)
+            imageView.isVisible = true
+            return
+        }
+        thread(name = "widgets-photo") {
+            val uri = latestPhotoUri()
+            runOnUiThread {
+                if (isFinishing || isDestroyed || uri == null) return@runOnUiThread
+                cachedPhotoUri = uri
+                imageView.setImageURI(uri)
+                imageView.isVisible = true
+            }
+        }
+    }
+
+    private fun latestPhotoUri(): Uri? = runCatching {
+        val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        contentResolver.query(
+            collection,
+            arrayOf(MediaStore.Images.Media._ID),
+            null,
+            null,
+            "${MediaStore.Images.Media.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID))
+            Uri.withAppendedPath(collection, id.toString())
+        }
+    }.getOrNull()
+
+    private fun openWallpaperPicker() {
+        runCatching { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) }
+    }
+
     private fun createClockWidget(parent: ViewGroup): View =
         layoutInflater.inflate(R.layout.item_home_clock_widget, parent, false).apply {
             setOnClickListener { openClockApp() }
@@ -636,9 +746,13 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     override fun appIcon(key: String): Drawable? = appsByKey[key]?.icon
 
+    override fun pagePosition(page: Int) = positionForHomeIndex(page)
+
+    override fun pageForPosition(position: Int) = homeIndexForPosition(position)
+
     override fun pageCells(page: Int): HomeCellLayout? {
         val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return null
-        return (recycler.findViewHolderForAdapterPosition(page) as? HomePagerAdapter.PageViewHolder)?.cells
+        return (recycler.findViewHolderForAdapterPosition(positionForHomeIndex(page)) as? HomePagerAdapter.PageViewHolder)?.cells
     }
 
     override fun refreshPage(page: Int) {
@@ -655,8 +769,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         if (model.trimEmptyPages()) {
             pagerAdapter.notifyDataSetChanged()
             rebuildPageDots()
-            if (binding.homePager.currentItem > model.pages.lastIndex) {
-                binding.homePager.setCurrentItem(model.pages.lastIndex, false)
+            val lastPagePosition = positionForHomeIndex(model.pages.lastIndex)
+            if (binding.homePager.currentItem > lastPagePosition) {
+                binding.homePager.setCurrentItem(lastPagePosition, false)
             }
         } else {
             refreshAllPages()
@@ -677,8 +792,8 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return
         for (i in 0 until recycler.childCount) {
             val holder = recycler.getChildViewHolder(recycler.getChildAt(i)) as? HomePagerAdapter.PageViewHolder ?: continue
-            val page = holder.bindingAdapterPosition
-            if (page != RecyclerView.NO_POSITION) renderPage(holder.cells, page, rebuild = false)
+            val homeIndex = homeIndexForPosition(holder.bindingAdapterPosition) ?: continue
+            renderPage(holder.cells, homeIndex, rebuild = false)
         }
     }
 
@@ -721,11 +836,12 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             }
         }
         pageDots.forEach(indicator::addView)
-        updatePageDots(binding.homePager.currentItem)
+        updatePageDots(homeIndexForPosition(binding.homePager.currentItem) ?: -1)
     }
 
-    private fun updatePageDots(position: Int) {
-        pageDots.forEachIndexed { index, dot -> dot.alpha = if (index == position) 1f else 0.35f }
+    /** [homeIndex] is a home-page index (see positionForHomeIndex/homeIndexForPosition), not a raw pager position. */
+    private fun updatePageDots(homeIndex: Int) {
+        pageDots.forEachIndexed { index, dot -> dot.alpha = if (index == homeIndex) 1f else 0.35f }
     }
 
     private fun showSearchPill(show: Boolean) {
@@ -772,12 +888,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.folderOverlay.isVisible = false
     }
 
-    /**
-     * Opens the real installed Clock app - same one that answers ACTION_SHOW_ALARMS, but
-     * launched via its own launcher entry (like tapping its icon) instead of firing that action
-     * directly, which can resolve to an unrelated app if more than one handles it and the user
-     * never picked a default.
-     */
+
     private fun openClockApp() {
         val clockPackage = packageManager.defaultHandlerPackage(Intent(AlarmClock.ACTION_SHOW_ALARMS))
         val clockApp = appsByKey.values.firstOrNull { it.packageName == clockPackage }
@@ -807,24 +918,38 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     }
 }
 
-/** The App Library is one extra page past the last home page - its own view type, no HomeCellLayout. */
+/**
+ * Pages are, in adapter-position order: home page 0, the Today View widgets page, home pages
+ * 1..N (shifted one later than their [HomeModel] index to make room for the widgets page), then
+ * the App Library. [homeIndexFor]/[viewTypeFor] do that position <-> home-index translation;
+ * callers outside this adapter should go through LauncherHomeActivity's own helpers of the same
+ * name rather than assume position == home index.
+ */
 private class HomePagerAdapter(
-    private val bindPage: (HomeCellLayout, Int) -> Unit,
-    private val pageCount: () -> Int,
-    private val bindLibrary: (ViewGroup) -> Unit
+    private val bindPage: (HomeCellLayout, homeIndex: Int) -> Unit,
+    private val bindWidgets: (ViewGroup) -> Unit,
+    private val bindLibrary: (ViewGroup) -> Unit,
+    private val itemCount: () -> Int,
+    private val viewTypeFor: (position: Int) -> Int,
+    private val homeIndexFor: (position: Int) -> Int
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     class PageViewHolder(val cells: HomeCellLayout) : RecyclerView.ViewHolder(cells)
+    class WidgetsViewHolder(val root: ViewGroup) : RecyclerView.ViewHolder(root)
     class LibraryViewHolder(val root: ViewGroup) : RecyclerView.ViewHolder(root)
 
-    override fun getItemViewType(position: Int) =
-        if (position == pageCount()) VIEW_TYPE_LIBRARY else VIEW_TYPE_HOME
+    override fun getItemViewType(position: Int) = viewTypeFor(position)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         if (viewType == VIEW_TYPE_LIBRARY) {
             val root = LayoutInflater.from(parent.context)
                 .inflate(R.layout.page_app_library, parent, false) as ViewGroup
             return LibraryViewHolder(root)
+        }
+        if (viewType == VIEW_TYPE_WIDGETS) {
+            val root = LayoutInflater.from(parent.context)
+                .inflate(R.layout.page_widgets, parent, false) as ViewGroup
+            return WidgetsViewHolder(root)
         }
         val cells = LayoutInflater.from(parent.context)
             .inflate(R.layout.page_home, parent, false) as HomeCellLayout
@@ -835,15 +960,17 @@ private class HomePagerAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (holder) {
-            is PageViewHolder -> bindPage(holder.cells, position)
+            is PageViewHolder -> bindPage(holder.cells, homeIndexFor(position))
+            is WidgetsViewHolder -> bindWidgets(holder.root)
             is LibraryViewHolder -> bindLibrary(holder.root)
         }
     }
 
-    override fun getItemCount() = pageCount() + 1
+    override fun getItemCount() = itemCount()
 
     companion object {
-        private const val VIEW_TYPE_HOME = 0
-        private const val VIEW_TYPE_LIBRARY = 1
+        const val VIEW_TYPE_HOME = 0
+        const val VIEW_TYPE_WIDGETS = 1
+        const val VIEW_TYPE_LIBRARY = 2
     }
 }

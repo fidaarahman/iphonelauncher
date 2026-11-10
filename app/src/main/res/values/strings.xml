@@ -5,6 +5,19 @@
     <string name="home_search">Search</string>
     <string name="app_library_title">App Library</string>
     <string name="home_widget_clock">Clock</string>
+    <string name="widget_sunset_label">Sunset</string>
+    <string name="widget_placeholder_dash">–</string>
+    <string name="widget_wallpapers_label">Wallpapers</string>
+    <string name="widget_control_center_label">Control Center</string>
+
+    <string name="control_center_title">Control Center</string>
+    <string name="control_center_hero_title">Swipe down to Open\nControl Center</string>
+    <string name="control_center_row_control_center">Control Center</string>
+    <string name="control_center_row_resize">Resize</string>
+    <string name="control_center_row_custom_controls">Custom Controls</string>
+    <string name="control_center_row_vibration">Vibration</string>
+    <string name="control_center_row_night_shift">Night Shift</string>
+    <string name="control_center_row_setup_record">Setup The Record</string>
 
     <string name="settings_default_launcher_title">Set as Default Launcher</string>
     <string name="settings_default_launcher_subtitle">Set Launcher OS 18 as default for the best experience.</string>

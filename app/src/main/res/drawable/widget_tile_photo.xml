@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Photo tile: rounded like the Figma tiles; dark see-through while no photo is shown.
+     Also gives the tile its rounded outline, so the photo is clipped to it (clipToOutline). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#33000000" />
+    <corners android:radius="24dp" />
+</shape>
