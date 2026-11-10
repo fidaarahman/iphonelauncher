@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/values/context_menu.xml - everything for the long-press menu, in its own file
+     (no changes needed to your existing strings.xml / styles / colors). -->
+<resources>
+
+    <!-- Menu rows -->
+    <string name="menu_remove_app">Remove App</string>
+    <string name="menu_edit_home_screen">Edit Home Screen</string>
+    <string name="menu_hide_app">Hide App</string>
+    <string name="menu_select">Select</string>
+    <string name="menu_app_info">App info</string>
+
+    <!-- Remove dialog (iOS wording) -->
+    <string name="remove_app_title">Remove “%1$s”?</string>
+    <string name="remove_app_message">Removing from Home Screen will keep the app in your App Library.</string>
+    <string name="remove_app_message_system">This app came with your phone, so it can only be removed from the Home Screen. It stays in your App Library.</string>
+    <string name="remove_app_delete">Delete App</string>
+    <string name="remove_app_from_home">Remove from Home Screen</string>
+    <string name="remove_app_cancel">Cancel</string>
+
+    <string name="edit_mode_done">Done</string>
+    <string name="coming_soon">Coming soon</string>
+
+    <color name="context_menu_text">#FF1C1C1E</color>
+    <color name="context_menu_icon">#FF8E8E93</color>
+    <color name="context_menu_divider">#FFE5E5EA</color>
+
+    <style name="ContextMenuRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+
+    <style name="ContextMenuText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/context_menu_text</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="ContextMenuIcon">
+        <item name="android:layout_width">22dp</item>
+        <item name="android:layout_height">22dp</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:contentDescription">@null</item>
+    </style>
+
+    <style name="ContextMenuDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">0.5dp</item>
+        <item name="android:background">@color/context_menu_divider</item>
+    </style>
+
+</resources>

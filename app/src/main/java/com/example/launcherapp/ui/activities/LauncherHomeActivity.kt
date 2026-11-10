@@ -1,6 +1,8 @@
 package com.example.launcherapp.ui.activities
 
 import android.Manifest
+import android.animation.ValueAnimator
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -25,12 +27,14 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.HapticFeedbackConstants
+import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
-import android.view.animation.Animation
-import android.view.animation.RotateAnimation
+import android.view.animation.LinearInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -61,9 +65,13 @@ import com.example.launcherapp.Repositories.defaultHandlerPackage
 import com.example.launcherapp.ui.icons.FolderIcon
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
+import com.example.launcherapp.ui.menu.AppContextMenu
 import com.example.launcherapp.ui.model.SunCalculator
 import com.example.launcherapp.views.HomeCellLayout
 import kotlin.concurrent.thread
+import kotlin.math.PI
+import kotlin.math.hypot
+import kotlin.math.sin
 import kotlin.random.Random
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -98,6 +106,37 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private var lastTouchRawX = 0f
     private var lastTouchRawY = 0f
     private var dragTouchCancelled = false
+    private val touchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
+
+    // ---- Long-press menu + edit mode ----------------------------------------------------------
+    private lateinit var contextMenu: AppContextMenu
+
+    /** iOS edit mode ("Edit Home Screen"): icons wiggle, tap does nothing, drag starts on touch. */
+    private var editMode = false
+
+    /**
+     * Set while the long-press menu is open AND the finger is still down. If that finger then
+     * moves, the menu closes and the icon is dragged instead (iOS behaviour).
+     */
+    private var menuDragKey: String? = null
+    private var menuDragIcon: View? = null
+    private var menuDownX = 0f
+    private var menuDownY = 0f
+
+    /**
+     * Icon wiggle. ONE shared animator rotates every wiggling view via the `rotation` property.
+     * (A RotateAnimation left on a view that gets removed keeps being drawn as a "ghost" icon.)
+     */
+    private val wigglingViews = WeakHashMap<View, Float>() // view -> phase
+    private val wiggleAnimator = ValueAnimator.ofFloat(0f, (2 * PI).toFloat()).apply {
+        duration = WIGGLE_PERIOD_MS
+        repeatCount = ValueAnimator.INFINITE
+        interpolator = LinearInterpolator()
+        addUpdateListener { animator ->
+            val angle = animator.animatedValue as Float
+            wigglingViews.forEach { (view, phase) -> view.rotation = WIGGLE_DEGREES * sin(angle + phase) }
+        }
+    }
 
     // Reloading when apps are installed / removed
     private var pendingReload = false
@@ -117,6 +156,11 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private var pageDots: List<View> = emptyList()
     private val restoreSearchPill = Runnable { showSearchPill(true) }
 
+    /**
+     * Which view currently represents each app key, per page. This is the single source of
+     * truth for reuse/cleanup in [renderPage] - we never rebuild it by scanning the ViewGroup's
+     * children, so it can't drift from what's actually attached (the cause of ghost icons).
+     */
     private val pageViews = WeakHashMap<HomeCellLayout, LinkedHashMap<String, View>>()
     private fun viewsFor(cells: HomeCellLayout) = pageViews.getOrPut(cells) { LinkedHashMap() }
 
@@ -140,14 +184,20 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         watchHomePageBottomSpace()
 
         binding.folderOverlay.setOnClickListener { closeFolder() }
+        contextMenu = AppContextMenu(binding.menuLayer, contextMenuActions)
+        binding.doneButton.setOnClickListener { setEditMode(false) }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 // A launcher must never close on Back.
-                if (binding.folderOverlay.isVisible) {
+                if (contextMenu.isShowing) {
+                    contextMenu.dismiss()
+                } else if (binding.folderOverlay.isVisible) {
                     closeFolder()
                 } else if (dragController.isDragging) {
                     dragController.cancelDrag()
+                } else if (editMode) {
+                    setEditMode(false)
                 } else {
                     binding.homePager.setCurrentItem(positionForHomeIndex(0), true)
                 }
@@ -160,6 +210,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     override fun onDestroy() {
         launcherApps?.unregisterCallback(packageCallback)
+        wiggleAnimator.cancel()
         binding.root.removeCallbacks(reloadRunnable)
         binding.root.removeCallbacks(restoreSearchPill)
         super.onDestroy()
@@ -169,8 +220,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         super.onNewIntent(intent)
         // Home pressed while already on the home screen.
         if (intent.action == Intent.ACTION_MAIN) {
+            clearMenuDrag()
+            contextMenu.dismiss(animate = false)
             if (dragController.isDragging) dragController.cancelDrag()
-            binding.homePager.setCurrentItem(positionForHomeIndex(0), true)
+            if (editMode) setEditMode(false) else binding.homePager.setCurrentItem(positionForHomeIndex(0), true)
         }
     }
 
@@ -181,6 +234,24 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         lastTouchRawX = event.rawX
         lastTouchRawY = event.rawY
+
+        // Long-press menu is open and the finger is still down: moving it turns into a drag.
+        val pendingKey = menuDragKey
+        if (pendingKey != null) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    if (hypot(event.rawX - menuDownX, event.rawY - menuDownY) > touchSlop * MENU_DRAG_SLOP_FACTOR) {
+                        val icon = menuDragIcon
+                        clearMenuDrag()
+                        contextMenu.dismiss(animate = false)
+                        if (icon != null) startDrag(pendingKey, icon, event.rawX, event.rawY)
+                    }
+                }
+                // Finger lifted without moving: the menu stays open for the user to pick an item.
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> clearMenuDrag()
+            }
+        }
+
         if (::dragController.isInitialized && dragController.isDragging) {
             if (!dragTouchCancelled) {
                 val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
@@ -197,10 +268,21 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // ---------------------------------------------------------------------------------------
     // Loading
     // ---------------------------------------------------------------------------------------
+
+    /**
+     * Loads apps + icons off the main thread, merges them with the saved layout and shows them.
+     * Also used to refresh after an app is installed or removed.
+     */
     private fun loadHomeInBackground() {
         val generation = layoutGeneration
         thread(name = "launcher-load-apps") {
             val apps = loadLaunchableApps()
+            // Non-essential Google apps are bundled into one "Google" folder icon instead of
+            // each getting their own home-screen spot; they still exist normally everywhere else
+            // (App Library, Suggestions, search) via the untouched `apps` list below.
+            // Dock roles (Phone/Browser/Messages/Music) need the same exemption as the home-grid
+            // essentials - otherwise whichever of them resolves to a Google app (e.g. Phone ->
+            // com.google.android.dialer on this device) gets folded away, leaving the dock short.
             val dockPackages = defaultDockPackages()
             val essentials = layoutRepository.essentialPackages().toSet() + dockPackages
             val folderMembers = apps.filter {
@@ -292,7 +374,13 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             .sortedBy { it.installTime }
     }
 
-
+    /**
+     * App Library "Suggestions", best source first:
+     * 1. Usage Access data (your existing HomeLayoutRepository.suggestedApps - empty if not granted);
+     * 2. apps launched most from this launcher (AppLaunchTracker);
+     * 3. on a fresh install: the default phone, messages, browser, camera, gallery, settings, clock.
+     * 2 and 3 are combined so the tile is full even after only a few launches.
+     */
     private fun suggestionsFor(apps: List<LauncherAppEntry>): List<LauncherAppEntry> {
         val ownPackage = packageName
         val fromUsage = layoutRepository.suggestedApps(apps).filter { it.packageName != ownPackage }
@@ -303,6 +391,11 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             .take(SUGGESTIONS_COUNT)
     }
 
+    /**
+     * CATEGORY_APP_BROWSER isn't reliably declared by every browser (especially OEM/third-party
+     * ones), so resolving a plain http VIEW intent - which every browser must handle - finds the
+     * real default far more consistently.
+     */
     private fun browserIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("http://"))
 
     private fun defaultSuggestions(apps: List<LauncherAppEntry>): List<LauncherAppEntry> = listOf(
@@ -337,6 +430,14 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // Pages
     // ---------------------------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------------------------
+    // Pager position <-> home-page-index translation.
+    // Adapter position order: Today View widgets, home[0..N], App Library. The widgets page sits
+    // BEFORE home page 1, reached by swiping backward from it - setupPager() sets the initial
+    // position to home index 0 so launch still lands on the real home page, not the widgets page.
+    // Every other part of the activity (DragController.Host included) speaks in home index;
+    // only these functions and the ViewPager2 callbacks below ever touch a raw position.
+    // -----------------------------------------------------------------------------------------
 
     private fun widgetsPosition() = 0
     private fun libraryPosition() = model.pages.size + 1
@@ -405,7 +506,24 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         })
     }
 
-
+    /**
+     * Draws one page from the model (or from the drag preview, which has an empty slot where
+     * the dragged icon would land). With [rebuild] = false existing views are reused and only
+     * moved (see [viewsFor]), and [animateMoves] slides them smoothly to their new spot instead
+     * of just snapping - the iOS rearrange feel, without ever re-deriving "what's on screen" by
+     * scanning the ViewGroup.
+     */
+    /**
+     * The pager is full height (so the App Library reaches the bottom of the screen). Home pages
+     * get this much bottom padding so their icons stay above the search pill and dock, exactly
+     * where they were before. Measured from the real layout, so it's right on every screen size.
+     *
+     * Seeded with a generous guess (dock + pill + their margins) instead of 0: the real
+     * measurement only arrives once the layout-change listener fires, and pages can render
+     * before that first firing - with 0 here, that first render would place the bottom row of
+     * icons flush against the screen edge, underneath the dock, making them unreachable until a
+     * later refresh corrected it.
+     */
     private var homePageBottomSpace = 0
 
     private fun watchHomePageBottomSpace() {
@@ -548,7 +666,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         icon.setImageDrawable(app.icon)
         cell.findViewById<TextView>(R.id.appLabel).text = app.label
         cell.contentDescription = app.label
-        attachIconInteractions(touchTarget = cell, iconView = icon, key = app.key)
+        attachIconInteractions(touchTarget = cell, iconView = icon, key = app.key, withMenu = true)
         return cell
     }
 
@@ -568,9 +686,6 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         bindBatteryTile(root)
         bindPhotoTile(root)
         root.findViewById<View>(R.id.wallpapersTile).setOnClickListener { openWallpaperPicker() }
-        root.findViewById<View>(R.id.controlCenterTile).setOnClickListener {
-            startActivity(Intent(this, ControlCenterActivity::class.java))
-        }
         requestWidgetPermissionsIfNeeded()
     }
 
@@ -690,7 +805,8 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             } else {
                 icon.setImageDrawable(app.icon)
                 icon.contentDescription = app.label
-                attachIconInteractions(touchTarget = icon, iconView = icon, key = app.key)
+                // Dock: long-press still drags straight away (menu for the dock decided later).
+                attachIconInteractions(touchTarget = icon, iconView = icon, key = app.key, withMenu = false)
                 applyWiggle(icon)
             }
             binding.dock.addView(slot)
@@ -701,16 +817,56 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // Drag & drop
     // ---------------------------------------------------------------------------------------
 
-    /** Tap opens the app. Long-press picks the icon up and drags it directly - no separate mode. */
-    private fun attachIconInteractions(touchTarget: View, iconView: View, key: String) {
+    /**
+     * Normal mode: tap opens the app.
+     * - [withMenu] (home grid): long-press opens the iOS menu; keep holding and move -> drag.
+     * - dock: long-press drags straight away, as before.
+     * Edit mode: tapping does nothing, and touching + moving an icon drags it immediately.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun attachIconInteractions(touchTarget: View, iconView: View, key: String, withMenu: Boolean) {
         touchTarget.setOnClickListener {
+            if (editMode) return@setOnClickListener
             if (key == FirstScreenPolicy.GOOGLE_FOLDER_KEY) openFolder() else appsByKey[key]?.let(::launchApp)
         }
         touchTarget.setOnLongClickListener {
             if (dragController.isDragging) return@setOnLongClickListener false
-            startDrag(key, iconView, lastTouchRawX, lastTouchRawY)
+            if (withMenu && !editMode) {
+                showContextMenu(key, touchTarget, iconView)
+            } else {
+                startDrag(key, iconView, lastTouchRawX, lastTouchRawY)
+            }
             true
         }
+        touchTarget.setOnTouchListener(EditModeDragStarter(key, iconView))
+    }
+
+    private fun showContextMenu(key: String, touchTarget: View, iconView: View) {
+        touchTarget.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        // Keep the pager from turning the next finger movement into a page swipe - that movement
+        // must start a drag instead (see dispatchTouchEvent).
+        touchTarget.parent?.requestDisallowInterceptTouchEvent(true)
+        menuDragKey = key
+        menuDragIcon = iconView
+        menuDownX = lastTouchRawX
+        menuDownY = lastTouchRawY
+        val isRealApp = key != FirstScreenPolicy.GOOGLE_FOLDER_KEY
+        contextMenu.show(
+            key, iconView, appsByKey[key]?.icon,
+            showAppInfo = isRealApp,
+            canDelete = canDelete(key)
+        )
+    }
+
+    /** Pre-installed system apps, the Google folder and this launcher itself can't be uninstalled here. */
+    private fun canDelete(key: String): Boolean {
+        val app = appsByKey[key] ?: return false
+        return key != FirstScreenPolicy.GOOGLE_FOLDER_KEY && !app.isSystemApp && app.packageName != packageName
+    }
+
+    private fun clearMenuDrag() {
+        menuDragKey = null
+        menuDragIcon = null
     }
 
     private fun startDrag(key: String, iconView: View, rawX: Float, rawY: Float) {
@@ -718,26 +874,124 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         dragController.startDrag(key, iconView, rawX, rawY)
     }
 
-    /** iOS "jiggle": a small endless rotation, each icon starting at a random moment - while a drag is active. */
-    private fun applyWiggle(view: View) {
-        if (dragController.isDragging) {
-            if (view.animation == null) {
-                view.startAnimation(
-                    RotateAnimation(
-                        -WIGGLE_DEGREES, WIGGLE_DEGREES,
-                        Animation.RELATIVE_TO_SELF, 0.5f,
-                        Animation.RELATIVE_TO_SELF, 0.5f
-                    ).apply {
-                        duration = WIGGLE_DURATION_MS
-                        repeatMode = Animation.REVERSE
-                        repeatCount = Animation.INFINITE
-                        startOffset = Random.nextLong(WIGGLE_DURATION_MS)
+    /** In edit mode, a finger that touches an icon and moves picks it up right away (like iOS). */
+    private inner class EditModeDragStarter(
+        private val key: String,
+        private val iconView: View
+    ) : View.OnTouchListener {
+        private var downX = 0f
+        private var downY = 0f
+        private var started = false
+
+        override fun onTouch(view: View, event: MotionEvent): Boolean {
+            if (!editMode || dragController.isDragging) return false
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    started = false
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!started && hypot(event.rawX - downX, event.rawY - downY) > touchSlop) {
+                        started = true
+                        view.cancelLongPress()
+                        val rawX = event.rawX
+                        val rawY = event.rawY
+                        // Posted, so the view isn't removed while it's still handling this event.
+                        view.post { if (editMode && !dragController.isDragging) startDrag(key, iconView, rawX, rawY) }
                     }
+                }
+            }
+            return false
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Long-press menu actions
+    // ---------------------------------------------------------------------------------------
+
+    private val contextMenuActions = object : AppContextMenu.Listener {
+        // "Remove App" opens its options inside the same menu (AppContextMenu), no dialog.
+        override fun onDeleteApp(key: String) {
+            appsByKey[key]?.let(::uninstallApp)
+        }
+        override fun onRemoveFromHome(key: String) = removeFromHomeScreen(key)
+        override fun onEditHomeScreen() = setEditMode(true)
+        override fun onHideApp(key: String) = comingSoon()
+        override fun onSelectApps(key: String) = comingSoon()
+        override fun onAppInfo(key: String) {
+            val app = appsByKey[key] ?: return
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", app.packageName, null))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             }
-        } else if (view.animation != null) {
-            view.clearAnimation()
         }
+    }
+
+    private fun comingSoon() = Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show()
+
+    /** Android's own uninstall confirmation. The LauncherApps callback reloads the home screen after. */
+    private fun uninstallApp(app: LauncherAppEntry) {
+        runCatching {
+            startActivity(
+                Intent(Intent.ACTION_DELETE, Uri.fromParts("package", app.packageName, null))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
+    /** Takes the app off the home screen / dock; it stays installed and in the App Library. */
+    private fun removeFromHomeScreen(key: String) {
+        if (model.remove(key) == null) return
+        layoutRepository.markRemovedFromHome(key)
+        layoutGeneration++
+        layoutRepository.save(model)
+
+        val currentHome = homeIndexForPosition(binding.homePager.currentItem)
+        if (model.trimEmptyPages()) {
+            pagerAdapter.notifyDataSetChanged()
+            rebuildPageDots()
+            if (currentHome != null && currentHome > model.pages.lastIndex) {
+                binding.homePager.setCurrentItem(positionForHomeIndex(model.pages.lastIndex), false)
+            }
+        } else {
+            refreshAllPages()
+        }
+        refreshDock()
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Edit mode ("Edit Home Screen") + wiggle
+    // ---------------------------------------------------------------------------------------
+
+    private fun setEditMode(enabled: Boolean) {
+        if (editMode == enabled) return
+        editMode = enabled
+        binding.doneButton.isVisible = enabled
+        refreshAllPages()
+        refreshDock()
+        if (!enabled) stopAllWiggles()
+    }
+
+    /** iOS "jiggle" - while in edit mode or while an icon is being dragged. */
+    private fun applyWiggle(view: View) {
+        if (editMode || dragController.isDragging) {
+            if (view !in wigglingViews) wigglingViews[view] = Random.nextFloat() * (2 * PI).toFloat()
+            if (!wiggleAnimator.isStarted) wiggleAnimator.start()
+        } else {
+            wigglingViews.remove(view)
+            view.rotation = 0f
+            if (wigglingViews.isEmpty()) wiggleAnimator.cancel()
+        }
+    }
+
+    private fun stopAllWiggles() {
+        wiggleAnimator.cancel()
+        wigglingViews.keys.forEach { it.rotation = 0f }
+        wigglingViews.clear()
     }
 
     // ---------------------------------------------------------------------------------------
@@ -766,6 +1020,8 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     override fun onDragFinished(changed: Boolean) {
         dragTouchCancelled = false
+        // Outside edit mode the wiggle only lasts while dragging.
+        if (!editMode) stopAllWiggles()
         if (model.trimEmptyPages()) {
             pagerAdapter.notifyDataSetChanged()
             rebuildPageDots()
@@ -888,7 +1144,12 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.folderOverlay.isVisible = false
     }
 
-
+    /**
+     * Opens the real installed Clock app - same one that answers ACTION_SHOW_ALARMS, but
+     * launched via its own launcher entry (like tapping its icon) instead of firing that action
+     * directly, which can resolve to an unrelated app if more than one handles it and the user
+     * never picked a default.
+     */
     private fun openClockApp() {
         val clockPackage = packageManager.defaultHandlerPackage(Intent(AlarmClock.ACTION_SHOW_ALARMS))
         val clockApp = appsByKey.values.firstOrNull { it.packageName == clockPackage }
@@ -906,7 +1167,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         private const val CLOCK_WIDGET_KEY = "#clock_widget"
         private const val RELOAD_DELAY_MS = 400L
         private const val WIGGLE_DEGREES = 1.8f
-        private const val WIGGLE_DURATION_MS = 130L
+        private const val WIGGLE_PERIOD_MS = 260L
+        // How far the finger must move (x touch slop) after the long-press menu opens to start a drag.
+        private const val MENU_DRAG_SLOP_FACTOR = 1.5f
         private const val MOVE_DURATION_MS = 220L
         private const val OVERLAY_FADE_MS = 200L
         private const val SUGGESTIONS_COUNT = 8

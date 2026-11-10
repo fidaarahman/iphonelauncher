@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    iOS long-press menu (Figma "Frame 1000004042"): white rounded card, 5 rows, thin dividers,
+    text on the left, grey icon on the right. Positioned next to the icon by AppContextMenu.
+    Icons: ic_remove, ic_edit_home_screen, ic_hidd_app, ic_select, ic_app_info
+    (Figma SVGs imported with New > Vector Asset).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="250dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_context_menu"
+    android:clipToOutline="true"
+    android:elevation="12dp"
+    android:orientation="vertical"
+    android:outlineProvider="background">
+
+    <LinearLayout
+        android:id="@+id/menuRemoveApp"
+        style="@style/ContextMenuRow">
+
+        <TextView
+            style="@style/ContextMenuText"
+            android:text="@string/menu_remove_app" />
+
+        <ImageView
+            style="@style/ContextMenuIcon"
+            android:src="@drawable/ic_remove"
+            app:tint="@color/context_menu_icon" />
+
+    </LinearLayout>
+
+    <View style="@style/ContextMenuDivider" />
+
+    <LinearLayout
+        android:id="@+id/menuEditHome"
+        style="@style/ContextMenuRow">
+
+        <TextView
+            style="@style/ContextMenuText"
+            android:text="@string/menu_edit_home_screen" />
+
+        <ImageView
+            style="@style/ContextMenuIcon"
+            android:src="@drawable/ic_edit_home_screen"
+            app:tint="@color/context_menu_icon" />
+
+    </LinearLayout>
+
+    <View style="@style/ContextMenuDivider" />
+
+    <LinearLayout
+        android:id="@+id/menuHideApp"
+        style="@style/ContextMenuRow">
+
+        <TextView
+            style="@style/ContextMenuText"
+            android:text="@string/menu_hide_app" />
+
+        <ImageView
+            style="@style/ContextMenuIcon"
+            android:src="@drawable/ic_hidd_app"
+            app:tint="@color/context_menu_icon" />
+
+    </LinearLayout>
+
+    <View style="@style/ContextMenuDivider" />
+
+    <LinearLayout
+        android:id="@+id/menuSelect"
+        style="@style/ContextMenuRow">
+
+        <TextView
+            style="@style/ContextMenuText"
+            android:text="@string/menu_select" />
+
+        <ImageView
+            style="@style/ContextMenuIcon"
+            android:src="@drawable/ic_select"
+            app:tint="@color/context_menu_icon" />
+
+    </LinearLayout>
+
+    <View
+        android:id="@+id/menuAppInfoDivider"
+        style="@style/ContextMenuDivider" />
+
+    <LinearLayout
+        android:id="@+id/menuAppInfo"
+        style="@style/ContextMenuRow">
+
+        <TextView
+            style="@style/ContextMenuText"
+            android:text="@string/menu_app_info" />
+
+        <ImageView
+            style="@style/ContextMenuIcon"
+            android:src="@drawable/ic_app_info"
+            app:tint="@color/context_menu_icon" />
+
+    </LinearLayout>
+
+</LinearLayout>

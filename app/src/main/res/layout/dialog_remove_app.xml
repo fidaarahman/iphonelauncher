@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    "Remove App" menu - same plain list style as view_app_context_menu.xml (left-aligned rows,
+    no title/description), not a dialog card. Cancel stays separated into its own card below,
+    matching the real iOS action-sheet pattern.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="250dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_context_menu"
+        android:clipToOutline="true"
+        android:orientation="vertical"
+        android:outlineProvider="background">
+
+        <LinearLayout
+            android:id="@+id/removeAppDelete"
+            style="@style/ContextMenuRow">
+
+            <TextView
+                style="@style/ContextMenuText"
+                android:text="@string/remove_app_delete"
+                android:textColor="#FF3B30" />
+
+        </LinearLayout>
+
+        <View
+            android:id="@+id/removeAppDeleteDivider"
+            style="@style/ContextMenuDivider" />
+
+        <LinearLayout
+            android:id="@+id/removeAppFromHome"
+            style="@style/ContextMenuRow">
+
+            <TextView
+                style="@style/ContextMenuText"
+                android:text="@string/remove_app_from_home" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="1dp"
+        android:layout_height="8dp" />
+
+    <TextView
+        android:id="@+id/removeAppCancel"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@drawable/bg_context_menu"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:text="@string/remove_app_cancel"
+        android:textColor="#FF007AFF"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

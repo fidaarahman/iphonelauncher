@@ -79,9 +79,47 @@ class HomeLayoutRepository(private val context: Context) {
             .toMutableList()
 
         val model = HomeModel(pages, dock)
-        orderForFirstLaunch(apps.filter { it.key !in placed }).forEach { model.append(it.key) }
+        // Apps the user removed from the Home Screen stay out (they're still in the App Library);
+        // only apps that are genuinely new get added at the end.
+        val removed = removedFromHome(installedKeys = installed.keys)
+        orderForFirstLaunch(apps.filter { it.key !in placed && it.key !in removed }).forEach { model.append(it.key) }
         model.trimEmptyPages()
         return model
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // "Remove from Home Screen" (long-press menu): the app leaves the home screen but stays
+    // installed and in the App Library. Saved, so the next load doesn't add it back as "new".
+    // -----------------------------------------------------------------------------------------
+
+    fun markRemovedFromHome(key: String) {
+        val keys = removedKeys().toMutableSet()
+        if (keys.add(key)) saveRemovedKeys(keys)
+    }
+
+    /** Puts an app back on the list of apps the home screen may show (for a later "Add to Home Screen"). */
+    fun unmarkRemovedFromHome(key: String) {
+        val keys = removedKeys().toMutableSet()
+        if (keys.remove(key)) saveRemovedKeys(keys)
+    }
+
+    /**
+     * Keys removed from the Home Screen. Keys of apps that are no longer installed are dropped,
+     * so an app that's uninstalled and later reinstalled shows up on the home screen again.
+     */
+    private fun removedFromHome(installedKeys: Set<String>): Set<String> {
+        val keys = removedKeys()
+        val stillInstalled = keys.filterTo(HashSet()) { it in installedKeys }
+        if (stillInstalled.size != keys.size) saveRemovedKeys(stillInstalled)
+        return stillInstalled
+    }
+
+    private fun removedKeys(): Set<String> =
+        layoutPrefs.getStringSet(KEY_REMOVED_FROM_HOME, null)?.toSet() ?: emptySet()
+
+    private fun saveRemovedKeys(keys: Set<String>) {
+        // Always write a fresh set: SharedPreferences must not be given back the set it returned.
+        layoutPrefs.edit().putStringSet(KEY_REMOVED_FROM_HOME, HashSet(keys)).apply()
     }
 
     private fun firstLaunchLayout(apps: List<LauncherAppEntry>, defaultDockPackages: List<String>): HomeModel {
@@ -184,6 +222,7 @@ class HomeLayoutRepository(private val context: Context) {
     companion object {
         const val LAYOUT_PREFS_NAME = "home_layout_prefs"
         private const val KEY_HOME_LAYOUT = "home_layout"
+        private const val KEY_REMOVED_FROM_HOME = "removed_from_home"
         private const val LAYOUT_VERSION = 1
         private const val USAGE_WINDOW_MS = 14L * 24 * 60 * 60 * 1000
     }
