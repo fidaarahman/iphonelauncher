@@ -1,9 +1,9 @@
 package com.example.launcherapp.Repositories
 
 /**
- * Which apps are forced onto / kept off the first home page, and where this app's own icon
- * is pinned. Edit these lists to change the rule - e.g. allow another Google app, or block
- * another store.
+ * Which apps are forced onto / kept off the first home page, where this app's own icon is
+ * pinned, and which apps get bundled into the "Google" folder instead of their own icon.
+ * Edit these lists to change the rule - e.g. block another store, or stop foldering an app.
  */
 object FirstScreenPolicy {
 
@@ -14,18 +14,20 @@ object FirstScreenPolicy {
      */
     const val OWN_APP_SLOT_INDEX = 4
 
-    /** Non-essential apps that must always be placed on the first page. */
+    /** Synthetic package/key for the auto-generated "Google" folder's own home-grid icon. */
+    const val GOOGLE_FOLDER_PACKAGE = "launcher.folder.google"
+    const val GOOGLE_FOLDER_KEY = "$GOOGLE_FOLDER_PACKAGE/"
+    const val GOOGLE_FOLDER_LABEL = "Google"
+
+    /** Slot index the Google folder is pinned to. Index 15 = row 5, column 4 (rightmost). */
+    const val GOOGLE_FOLDER_SLOT_INDEX = 15
+
+    /** Non-essential apps that must always be placed on the first page, as their own icon. */
     val ALWAYS_ALLOWED = setOf(
         "com.whatsapp",
         "com.facebook.katana",
-        "com.android.vending" // Play Store
-    )
-
-    /** Google apps allowed on the first page despite the blanket Google block below. */
-    private val GOOGLE_ALLOWED = setOf(
-        "com.google.android.gm",         // Gmail
-        "com.google.android.apps.maps",  // Maps
-        "com.google.android.apps.photos" // Google Photos
+        "com.android.vending",         // Play Store
+        "com.google.android.youtube"   // YouTube
     )
 
     /** Apps kept off the first page regardless of category - add any package name here. */
@@ -34,11 +36,18 @@ object FirstScreenPolicy {
         "net.oneplus.forums"    // Community
     )
 
+    /**
+     * True if [packageName] is a non-essential Google app that belongs inside the Google folder
+     * instead of getting its own home-screen icon. Essentials (Calendar, Contacts, Phone...)
+     * are exempted by the caller, since those stay standalone regardless of who makes them.
+     */
+    fun isGoogleFolderMember(packageName: String): Boolean =
+        packageName.startsWith("com.google.") && packageName !in ALWAYS_ALLOWED
+
     /** True if [packageName] must be kept off the first page (it overflows onto a later page). */
     fun isBlocked(packageName: String): Boolean {
         if (packageName in ALWAYS_ALLOWED) return false
         if (packageName in ALWAYS_BLOCKED) return true
-        if (packageName.startsWith("com.google.") && packageName !in GOOGLE_ALLOWED) return true
         return isStoreApp(packageName)
     }
 

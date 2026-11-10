@@ -135,4 +135,59 @@
 
     </FrameLayout>
 
+    <!--
+        Open-folder view: dark scrim + title + a translucent rounded panel holding the folder's
+        apps (iOS style). Hidden by default; LauncherHomeActivity shows/populates it on tap.
+        Tapping the scrim (outside the panel) closes it without launching anything.
+    -->
+    <FrameLayout
+        android:id="@+id/folderOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#B3000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/folderTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:fontFamily="sans-serif-medium"
+                android:textColor="@android:color/white"
+                android:textSize="20sp" />
+
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/folder_panel_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:minWidth="260dp"
+                android:padding="12dp">
+
+                <android.widget.GridLayout
+                    android:id="@+id/folderGrid"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:columnCount="3" />
+
+            </FrameLayout>
+
+        </LinearLayout>
+
+    </FrameLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

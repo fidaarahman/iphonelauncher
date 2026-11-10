@@ -48,7 +48,9 @@ import com.example.launcherapp.ui.model.AppLibraryGroup
 import com.example.launcherapp.ui.model.HomeGrid
 import com.example.launcherapp.Repositories.HomeLayoutRepository
 import com.example.launcherapp.ui.model.HomeModel
+import com.example.launcherapp.Repositories.FirstScreenPolicy
 import com.example.launcherapp.Repositories.defaultHandlerPackage
+import com.example.launcherapp.ui.icons.FolderIcon
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
 import com.example.launcherapp.views.HomeCellLayout
@@ -71,6 +73,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     private var appsByKey: Map<String, LauncherAppEntry> = emptyMap()
     private var appLibraryGroups: List<AppLibraryGroup> = emptyList()
+
+    /** Real apps currently bundled inside the "Google" folder icon - populated each load. */
+    private var googleFolderMembers: List<LauncherAppEntry> = emptyList()
 
     // Touch bookkeeping for drag & drop
     private var lastTouchRawX = 0f
@@ -122,10 +127,14 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         setupPager()
         watchHomePageBottomSpace()
 
+        binding.folderOverlay.setOnClickListener { closeFolder() }
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 // A launcher must never close on Back.
-                if (dragController.isDragging) {
+                if (binding.folderOverlay.isVisible) {
+                    closeFolder()
+                } else if (dragController.isDragging) {
                     dragController.cancelDrag()
                 } else {
                     binding.homePager.setCurrentItem(0, true)
@@ -185,7 +194,28 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         val generation = layoutGeneration
         thread(name = "launcher-load-apps") {
             val apps = loadLaunchableApps()
-            val loaded = layoutRepository.load(apps, defaultDockPackages())
+            // Non-essential Google apps are bundled into one "Google" folder icon instead of
+            // each getting their own home-screen spot; they still exist normally everywhere else
+            // (App Library, Suggestions, search) via the untouched `apps` list below.
+            // Dock roles (Phone/Browser/Messages/Music) need the same exemption as the home-grid
+            // essentials - otherwise whichever of them resolves to a Google app (e.g. Phone ->
+            // com.google.android.dialer on this device) gets folded away, leaving the dock short.
+            val dockPackages = defaultDockPackages()
+            val essentials = layoutRepository.essentialPackages().toSet() + dockPackages
+            val folderMembers = apps.filter {
+                it.packageName !in essentials && FirstScreenPolicy.isGoogleFolderMember(it.packageName)
+            }
+            val folderEntry = folderMembers.takeIf { it.isNotEmpty() }?.let {
+                LauncherAppEntry(
+                    label = FirstScreenPolicy.GOOGLE_FOLDER_LABEL,
+                    icon = iconShaper.shape(FolderIcon.draw(this, it.map { member -> member.icon })),
+                    packageName = FirstScreenPolicy.GOOGLE_FOLDER_PACKAGE,
+                    activityName = ""
+                )
+            }
+            val folderMemberKeys = folderMembers.mapTo(HashSet()) { it.key }
+            val homeGridApps = apps.filterNot { it.key in folderMemberKeys } + listOfNotNull(folderEntry)
+            val loaded = layoutRepository.load(homeGridApps, dockPackages)
             val suggested = suggestionsFor(apps)
             val libraryGroups = AppLibraryBuilder.build(apps, suggested)
             runOnUiThread {
@@ -199,7 +229,8 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                     scheduleReload()
                     return@runOnUiThread
                 }
-                appsByKey = apps.associateBy { it.key }
+                appsByKey = (apps + listOfNotNull(folderEntry)).associateBy { it.key }
+                googleFolderMembers = folderMembers
                 appLibraryGroups = libraryGroups
                 model = loaded
                 layoutRepository.save(model)
@@ -563,7 +594,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     /** Tap opens the app. Long-press picks the icon up and drags it directly - no separate mode. */
     private fun attachIconInteractions(touchTarget: View, iconView: View, key: String) {
         touchTarget.setOnClickListener {
-            appsByKey[key]?.let(::launchApp)
+            if (key == FirstScreenPolicy.GOOGLE_FOLDER_KEY) openFolder() else appsByKey[key]?.let(::launchApp)
         }
         touchTarget.setOnLongClickListener {
             if (dragController.isDragging) return@setOnLongClickListener false
@@ -717,6 +748,28 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             startActivity(intent)
             AppLaunchTracker.recordLaunch(app.key) // feeds App Library Suggestions
         } // app may have been uninstalled since loading
+    }
+
+    /** Shows the Google folder's apps over a dark scrim. Tapping the scrim or Back closes it. */
+    private fun openFolder() {
+        if (googleFolderMembers.isEmpty()) return
+        binding.folderTitle.text = FirstScreenPolicy.GOOGLE_FOLDER_LABEL
+        binding.folderGrid.removeAllViews()
+        googleFolderMembers.forEach { app ->
+            val cell = layoutInflater.inflate(R.layout.item_folder_app, binding.folderGrid, false)
+            cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(app.icon)
+            cell.findViewById<TextView>(R.id.appLabel).text = app.label
+            cell.setOnClickListener {
+                closeFolder()
+                launchApp(app)
+            }
+            binding.folderGrid.addView(cell)
+        }
+        binding.folderOverlay.isVisible = true
+    }
+
+    private fun closeFolder() {
+        binding.folderOverlay.isVisible = false
     }
 
     /**

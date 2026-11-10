@@ -91,16 +91,23 @@ class HomeLayoutRepository(private val context: Context) {
             .toMutableList()
 
         val remaining = apps.filter { it.key !in dock }
-        // This app's own icon is pinned to a fixed slot on the first page (see
-        // FirstScreenPolicy.OWN_APP_SLOT_INDEX) so Settings stays reachable at a known spot
-        // even before the user has arranged anything.
+        // This app's own icon and the Google folder are pinned to fixed slots on the first page
+        // (see FirstScreenPolicy.OWN_APP_SLOT_INDEX / GOOGLE_FOLDER_SLOT_INDEX) so they land at a
+        // known spot even before the user has arranged anything.
         val ownApp = remaining.firstOrNull { it.packageName == context.packageName }
-        val ordered = orderForFirstLaunch(remaining.filterNot { it.packageName == context.packageName })
+        val folderEntry = remaining.firstOrNull { it.packageName == FirstScreenPolicy.GOOGLE_FOLDER_PACKAGE }
+        val ordered = orderForFirstLaunch(
+            remaining.filterNot { it.packageName == context.packageName || it.packageName == FirstScreenPolicy.GOOGLE_FOLDER_PACKAGE }
+        )
+
+        val keys = ordered.map { it.key }.toMutableList()
+        listOfNotNull(
+            ownApp?.let { FirstScreenPolicy.OWN_APP_SLOT_INDEX to it.key },
+            folderEntry?.let { FirstScreenPolicy.GOOGLE_FOLDER_SLOT_INDEX to it.key }
+        ).sortedBy { it.first }.forEach { (index, key) -> keys.add(index.coerceAtMost(keys.size), key) }
 
         val model = HomeModel(mutableListOf(), dock)
-        ordered.take(FirstScreenPolicy.OWN_APP_SLOT_INDEX).forEach { model.append(it.key) }
-        ownApp?.let { model.append(it.key) }
-        ordered.drop(FirstScreenPolicy.OWN_APP_SLOT_INDEX).forEach { model.append(it.key) }
+        keys.forEach { model.append(it) }
         return model
     }
 
@@ -126,6 +133,7 @@ class HomeLayoutRepository(private val context: Context) {
         val essentials = essentialPackages()
         fun tier(entry: LauncherAppEntry) = when {
             entry.packageName in essentials -> 0
+            entry.packageName == FirstScreenPolicy.GOOGLE_FOLDER_PACKAGE -> 1
             entry.packageName in FirstScreenPolicy.ALWAYS_ALLOWED -> 1
             FirstScreenPolicy.isBlocked(entry.packageName) -> 3
             else -> 2
@@ -155,8 +163,11 @@ class HomeLayoutRepository(private val context: Context) {
             .filterValues { it > 0L }
     }.getOrDefault(emptyMap())
 
-    /** Built-in apps shown first on a fresh install (when there's no usage data). */
-    private fun essentialPackages(): List<String> = listOf(
+    /**
+     * Built-in apps shown first on a fresh install (when there's no usage data). Also used by
+     * the caller to decide which apps are exempt from being bundled into the Google folder.
+     */
+    fun essentialPackages(): List<String> = listOf(
         Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA),
         category(Intent.CATEGORY_APP_GALLERY),
         category(Intent.CATEGORY_APP_CALENDAR),

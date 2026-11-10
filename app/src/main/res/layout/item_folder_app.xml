@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One icon inside the open-folder panel. Dark label, since it sits on a light panel background. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="88dp"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="6dp">
+
+    <ImageView
+        android:id="@+id/appIcon"
+        android:layout_width="55dp"
+        android:layout_height="55dp"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/appLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textColor="@android:color/black"
+        android:textSize="11sp" />
+
+</LinearLayout>
