@@ -15,8 +15,18 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
+    /** Set right before launching the role request, so the callback knows if we were default before. */
+    private var wasDefaultHome = false
+
     private val requestHomeRole = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        binding.switchDefaultLauncher.isChecked = isAppDefaultHome()
+        val isDefault = isAppDefaultHome()
+        binding.switchDefaultLauncher.isChecked = isDefault
+        if (wasDefaultHome && !isDefault) {
+            // Switched away from us: cover the handoff with our own spinner for a moment instead
+            // of cutting straight to the new default launcher's cold-start loading screen.
+            binding.switchTransitionOverlay.visibility = android.view.View.VISIBLE
+            binding.root.postDelayed({ finish() }, SWITCH_TRANSITION_DELAY_MS)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestDefaultHome() {
+        wasDefaultHome = isAppDefaultHome()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
             if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
@@ -53,5 +64,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         requestHomeRole.launch(Intent(Settings.ACTION_HOME_SETTINGS))
+    }
+
+    companion object {
+        private const val SWITCH_TRANSITION_DELAY_MS = 700L
     }
 }

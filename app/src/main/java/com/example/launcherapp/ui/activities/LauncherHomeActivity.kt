@@ -2,6 +2,7 @@ package com.example.launcherapp.ui.activities
 
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.graphics.Color
@@ -276,10 +277,17 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             .take(SUGGESTIONS_COUNT)
     }
 
+    /**
+     * CATEGORY_APP_BROWSER isn't reliably declared by every browser (especially OEM/third-party
+     * ones), so resolving a plain http VIEW intent - which every browser must handle - finds the
+     * real default far more consistently.
+     */
+    private fun browserIntent() = Intent(Intent.ACTION_VIEW, Uri.parse("http://"))
+
     private fun defaultSuggestions(apps: List<LauncherAppEntry>): List<LauncherAppEntry> = listOf(
         Intent(Intent.ACTION_DIAL),
         Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING),
-        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER),
+        browserIntent(),
         Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA),
         Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_GALLERY),
         Intent(Settings.ACTION_SETTINGS),
@@ -295,7 +303,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     /** Packages used for the dock the very first time (after that the user's own dock is saved). */
     private fun defaultDockPackages(): List<String> = listOfNotNull(
         packageManager.defaultHandlerPackage(Intent(Intent.ACTION_DIAL)),
-        packageManager.defaultHandlerPackage(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_BROWSER)),
+        packageManager.defaultHandlerPackage(browserIntent()),
         packageManager.defaultHandlerPackage(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)),
         packageManager.defaultHandlerPackage(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC))
     )

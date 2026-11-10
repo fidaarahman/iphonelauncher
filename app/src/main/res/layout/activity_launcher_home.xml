@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    Root is a ConstraintLayout; every full-screen layer is pinned to all four edges.
-    The wallpaper stays full-bleed (behind status + nav bars) while only homeContent receives
-    the system-bar insets as padding (LauncherHomeActivity.applySystemBarInsets).
-    Children are drawn in order, so later layers sit on top: wallpaper < homeContent < dragLayer < loadingOverlay.
--->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"

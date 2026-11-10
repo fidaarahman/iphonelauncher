@@ -3,6 +3,7 @@ package com.example.launcherapp.Repositories
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.provider.AlarmClock
 import android.provider.MediaStore
@@ -11,7 +12,7 @@ import androidx.annotation.Keep
 import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.ui.model.HomeGrid
 import com.example.launcherapp.ui.model.HomeModel
-import com.example.launcherapp.utils.SessionManager
+import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 
 
@@ -26,21 +27,28 @@ data class SavedHomeLayout(
 class HomeLayoutRepository(private val context: Context) {
 
     private val packageManager = context.packageManager
+    private val gson = GsonBuilder().create()
+
+    // Its own prefs file, excluded from Android Auto Backup (see backup_rules.xml /
+    // data_extraction_rules.xml) - so a fresh install always starts from firstLaunchLayout()
+    // instead of silently restoring a stale cloud-backed-up arrangement.
+    private val layoutPrefs: SharedPreferences =
+        context.getSharedPreferences(LAYOUT_PREFS_NAME, Context.MODE_PRIVATE)
 
     fun load(apps: List<LauncherAppEntry>, defaultDockPackages: List<String>): HomeModel {
-        val saved = runCatching { SessionManager.getObject<SavedHomeLayout>(KEY_HOME_LAYOUT) }.getOrNull()
+        val saved = runCatching {
+            layoutPrefs.getString(KEY_HOME_LAYOUT, null)?.let { gson.fromJson(it, SavedHomeLayout::class.java) }
+        }.getOrNull()
         return if (saved == null) firstLaunchLayout(apps, defaultDockPackages) else mergeSaved(saved, apps)
     }
 
     fun save(model: HomeModel) {
-        SessionManager.setObject(
-            SavedHomeLayout(
-                version = LAYOUT_VERSION,
-                pages = model.pages.map { it.toList() },
-                dock = model.dock.toList()
-            ),
-            KEY_HOME_LAYOUT
+        val saved = SavedHomeLayout(
+            version = LAYOUT_VERSION,
+            pages = model.pages.map { it.toList() },
+            dock = model.dock.toList()
         )
+        layoutPrefs.edit().putString(KEY_HOME_LAYOUT, gson.toJson(saved)).apply()
     }
 
     private fun mergeSaved(saved: SavedHomeLayout, apps: List<LauncherAppEntry>): HomeModel {
@@ -71,9 +79,7 @@ class HomeLayoutRepository(private val context: Context) {
             .toMutableList()
 
         val model = HomeModel(pages, dock)
-        apps.filter { it.key !in placed }
-            .sortedBy { it.installTime }
-            .forEach { model.append(it.key) }
+        orderForFirstLaunch(apps.filter { it.key !in placed }).forEach { model.append(it.key) }
         model.trimEmptyPages()
         return model
     }
@@ -84,8 +90,17 @@ class HomeLayoutRepository(private val context: Context) {
             .take(HomeGrid.DOCK_CAPACITY)
             .toMutableList()
 
+        val remaining = apps.filter { it.key !in dock }
+        // This app's own icon is pinned to a fixed slot on the first page (see
+        // FirstScreenPolicy.OWN_APP_SLOT_INDEX) so Settings stays reachable at a known spot
+        // even before the user has arranged anything.
+        val ownApp = remaining.firstOrNull { it.packageName == context.packageName }
+        val ordered = orderForFirstLaunch(remaining.filterNot { it.packageName == context.packageName })
+
         val model = HomeModel(mutableListOf(), dock)
-        orderForFirstLaunch(apps.filter { it.key !in dock }).forEach { model.append(it.key) }
+        ordered.take(FirstScreenPolicy.OWN_APP_SLOT_INDEX).forEach { model.append(it.key) }
+        ownApp?.let { model.append(it.key) }
+        ordered.drop(FirstScreenPolicy.OWN_APP_SLOT_INDEX).forEach { model.append(it.key) }
         return model
     }
 
@@ -102,18 +117,32 @@ class HomeLayoutRepository(private val context: Context) {
             .take(limit)
     }
 
+    /**
+     * Orders apps for page placement: essentials first, then apps FirstScreenPolicy always
+     * allows, then everything else, then apps FirstScreenPolicy blocks from the first page
+     * (pushed last so they overflow onto a later page instead of appearing on page 1).
+     */
     private fun orderForFirstLaunch(apps: List<LauncherAppEntry>): List<LauncherAppEntry> {
+        val essentials = essentialPackages()
+        fun tier(entry: LauncherAppEntry) = when {
+            entry.packageName in essentials -> 0
+            entry.packageName in FirstScreenPolicy.ALWAYS_ALLOWED -> 1
+            FirstScreenPolicy.isBlocked(entry.packageName) -> 3
+            else -> 2
+        }
+
         val usage = usageTimeByPackage()
         if (usage.isNotEmpty()) {
             return apps.sortedWith(
-                compareByDescending<LauncherAppEntry> { usage[it.packageName] ?: 0L }
-                    .thenBy { it.label.lowercase() }
+                compareBy<LauncherAppEntry> { tier(it) }
+                    .thenByDescending { usage[it.packageName] ?: 0L }
+                    .thenBy { it.installTime }
             )
         }
-        val essentials = essentialPackages()
         return apps.sortedWith(
-            compareBy<LauncherAppEntry> { essentials.indexOf(it.packageName).let { i -> if (i < 0) Int.MAX_VALUE else i } }
-                .thenBy { it.label.lowercase() }
+            compareBy<LauncherAppEntry> { tier(it) }
+                .thenBy { essentials.indexOf(it.packageName).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+                .thenBy { it.installTime }
         )
     }
 
@@ -137,15 +166,15 @@ class HomeLayoutRepository(private val context: Context) {
         category(Intent.CATEGORY_APP_MAPS),
         category(Intent.CATEGORY_APP_CALCULATOR),
         Intent(Settings.ACTION_SETTINGS)
-    ).mapNotNull { packageManager.defaultHandlerPackage(it) } + PLAY_STORE_PACKAGE
+    ).mapNotNull { packageManager.defaultHandlerPackage(it) }
 
     private fun category(category: String) = Intent(Intent.ACTION_MAIN).addCategory(category)
 
     companion object {
-        const val KEY_HOME_LAYOUT = "home_layout"
+        const val LAYOUT_PREFS_NAME = "home_layout_prefs"
+        private const val KEY_HOME_LAYOUT = "home_layout"
         private const val LAYOUT_VERSION = 1
         private const val USAGE_WINDOW_MS = 14L * 24 * 60 * 60 * 1000
-        private const val PLAY_STORE_PACKAGE = "com.android.vending"
     }
 }
 

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.MediaStore
 import android.provider.Settings
@@ -69,7 +70,9 @@ class IosIconProvider(private val context: Context) {
     private fun roleIcons(): List<Pair<Intent, String>> = listOf(
         Intent(Intent.ACTION_DIAL) to "ic_phone",
         category(Intent.CATEGORY_APP_MESSAGING) to "ic_messages",
-        category(Intent.CATEGORY_APP_BROWSER) to "ic_compass",
+        // CATEGORY_APP_BROWSER isn't reliably declared by every browser, so match via a plain
+        // http VIEW intent instead - every browser must handle that, by definition.
+        Intent(Intent.ACTION_VIEW, Uri.parse("http://")) to "ic_compass",
         Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA) to "ic_camera",
         category(Intent.CATEGORY_APP_GALLERY) to "ic_photos",
         category(Intent.CATEGORY_APP_EMAIL) to "ic_mail",
@@ -91,6 +94,12 @@ class IosIconProvider(private val context: Context) {
         private val PACKAGE_ICONS = mapOf(
             "com.android.vending" to "ic_playstore",  // Play Store
             "com.google.android.keep" to "ic_notes",  // Google Keep
+            "com.oneplus.note" to "ic_notes",         // OnePlus Notes
+            "com.vivo.notes" to "ic_notes",           // Vivo Notes
+            "com.samsung.android.app.notes" to "ic_notes", // Samsung Notes
+            "com.miui.notes" to "ic_notes",           // Xiaomi/MIUI Notes
+            "com.coloros.note" to "ic_notes",         // Oppo/Realme (ColorOS) Notes
+            "com.huawei.notepad" to "ic_notes",       // Huawei Notepad
             "com.google.android.apps.tasks" to "ic_reminders",   // Google Tasks
             "com.samsung.android.app.reminder" to "ic_reminders", // Samsung Reminder
             "com.microsoft.todos" to "ic_reminders",  // Microsoft To Do
