@@ -3,6 +3,9 @@ package com.example.launcherapp.ui.activities
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.example.launcherapp.databinding.ActivityControlCenterBinding
 import com.example.launcherapp.utils.SessionManager
 
@@ -21,6 +24,7 @@ class ControlCenterActivity : AppCompatActivity() {
         enableEdgeToEdge()
         binding = ActivityControlCenterBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemBarInsets()
 
         binding.switchControlCenter.isChecked = SessionManager.getBool(KEY_CONTROL_CENTER_ENABLED, true)
         binding.switchControlCenter.setOnCheckedChangeListener { _, checked ->
@@ -30,6 +34,15 @@ class ControlCenterActivity : AppCompatActivity() {
         binding.switchVibration.isChecked = SessionManager.getBool(KEY_VIBRATION_ENABLED, true)
         binding.switchVibration.setOnCheckedChangeListener { _, checked ->
             SessionManager.putBool(KEY_VIBRATION_ENABLED, checked)
+        }
+    }
+
+    /** Pushes the scrollable content below the status bar / above the nav bar - enableEdgeToEdge() draws under both by design, so something has to consume the insets. */
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(left = bars.left, top = bars.top, right = bars.right, bottom = bars.bottom)
+            insets
         }
     }
 

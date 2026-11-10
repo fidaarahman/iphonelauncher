@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <queries>
         <intent>
@@ -42,6 +43,10 @@
         <activity
             android:name=".ui.activities.ControlCenterActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.activities.SearchActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.activities.LauncherHomeActivity"
             android:exported="true"

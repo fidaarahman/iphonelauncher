@@ -15,16 +15,7 @@ import androidx.core.graphics.withClip
 import java.util.Calendar
 import kotlin.math.exp
 
-/**
- * The sun-arc from the Figma "Sunset" tile (ic_sunset.svg), drawn in code so the sun can MOVE:
- * - the curve is the exact Figma path; above the horizon it uses the Figma blue gradient,
- *   below the horizon it's the 15% black shade, with the Figma 1-unit gap as the horizon line;
- * - the sun travels along the curve: sunrise -> sunset across the visible arc, and through the
- *   low ends of the curve at night (dimmed below the horizon).
- *
- * Call [setSunTimes] with today's real sunrise/sunset; until then it assumes 06:00 / 18:00.
- * Height is always width x 41/158 (the SVG's aspect ratio), so use layout_height="wrap_content".
- */
+
 class SunArcView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -126,10 +117,7 @@ class SunArcView @JvmOverloads constructor(
     /** Viewbox y -> view pixels. */
     private fun toY(viewBoxY: Float) = (viewBoxY - VB_TOP) * sy
 
-    /**
-     * Sun's x on the curve (viewbox units). Daytime moves from the left horizon crossing to the
-     * right one; night continues off the right end and comes back in from the left end.
-     */
+
     private fun sunX(now: Long): Float {
         val (riseMs, setMs) = todaysSunTimes()
         if (now in riseMs..setMs) {

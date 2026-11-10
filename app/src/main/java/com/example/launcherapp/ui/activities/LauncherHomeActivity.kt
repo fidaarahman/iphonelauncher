@@ -68,6 +68,7 @@ import com.example.launcherapp.ui.icons.IosIconProvider
 import com.example.launcherapp.ui.menu.AppContextMenu
 import com.example.launcherapp.ui.model.SunCalculator
 import com.example.launcherapp.views.HomeCellLayout
+import com.example.launcherapp.views.SunArcView
 import kotlin.concurrent.thread
 import kotlin.math.PI
 import kotlin.math.hypot
@@ -186,6 +187,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.folderOverlay.setOnClickListener { closeFolder() }
         contextMenu = AppContextMenu(binding.menuLayer, contextMenuActions)
         binding.doneButton.setOnClickListener { setEditMode(false) }
+        binding.searchPill.setOnClickListener { startActivity(Intent(this, SearchActivity::class.java)) }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -686,6 +688,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         bindBatteryTile(root)
         bindPhotoTile(root)
         root.findViewById<View>(R.id.wallpapersTile).setOnClickListener { openWallpaperPicker() }
+        root.findViewById<View>(R.id.controlCenterTile).setOnClickListener {
+            startActivity(Intent(this, ControlCenterActivity::class.java))
+        }
         requestWidgetPermissionsIfNeeded()
     }
 
@@ -714,6 +719,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         }
         val sunsetTime = root.findViewById<TextView>(R.id.weatherSunsetTime)
         val sunriseTime = root.findViewById<TextView>(R.id.weatherSunriseTime)
+        val sunArc = root.findViewById<SunArcView?>(R.id.sunArc)
         thread(name = "widgets-weather") {
             val times = lastKnownLocation()?.let { SunCalculator.calculate(it.latitude, it.longitude) }
             runOnUiThread {
@@ -721,6 +727,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                 val formatter = SimpleDateFormat("h:mm a", Locale.getDefault())
                 sunsetTime.text = times?.sunset?.time?.let(formatter::format) ?: getString(R.string.widget_placeholder_dash)
                 sunriseTime.text = times?.sunrise?.time?.let { "Sunrise: ${formatter.format(it)}" } ?: ""
+                times?.let { sunArc?.setSunTimes(it.sunrise.timeInMillis, it.sunset.timeInMillis) }
             }
         }
     }
@@ -1115,7 +1122,16 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             addCategory(Intent.CATEGORY_LAUNCHER)
             component = ComponentName(app.packageName, app.activityName)
         }
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+        // FLAG_ACTIVITY_RESET_TASK_IF_NEEDED resets OTHER apps back to their root screen when
+        // tapped from home - but this app's own icon targets SplashActivity, which shares this
+        // task's affinity with the already-running LauncherHomeActivity (same package), so that
+        // flag would reset the task back to LauncherHomeActivity itself instead of showing
+        // SplashActivity - i.e. tapping this app's own icon would silently do nothing.
+        intent.flags = if (app.packageName == packageName) {
+            Intent.FLAG_ACTIVITY_NEW_TASK
+        } else {
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+        }
         runCatching {
             startActivity(intent)
             AppLaunchTracker.recordLaunch(app.key) // feeds App Library Suggestions

@@ -38,11 +38,17 @@ object SunCalculator {
         return SunTimes(julianToCalendar(jRise), julianToCalendar(jSet))
     }
 
+    /**
+     * Julian Day Number, referenced at NOON UTC (the Fliegel-Van Flandern formula's native
+     * convention, matching the Sunrise Equation's own J2000.0-at-noon epoch). Do NOT shift this
+     * to midnight (e.g. "- 0.5") - that introduces a flat 12-hour error into every sunrise/sunset
+     * this feeds, which is exactly the bug this comment is here to prevent reintroducing.
+     */
     private fun toJulianDay(year: Int, month: Int, day: Int): Double {
         val a = (14 - month) / 12
         val y = year + 4800 - a
         val m = month + 12 * a - 3
-        return (day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045 - 0.5).toDouble()
+        return (day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045).toDouble()
     }
 
     private fun julianToCalendar(julianDay: Double): Calendar =

@@ -4,6 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/splash_background"
+    android:clipToPadding="false"
     android:fillViewport="true"
     tools:context=".ui.activities.ControlCenterActivity">
 
@@ -22,25 +23,13 @@
             android:textSize="16sp"
             android:textStyle="bold" />
 
-        <!-- Hero banner: real "swipe down" illustration pending from Figma; placeholder gradient for now. -->
-        <FrameLayout
+        <ImageView
             android:layout_width="match_parent"
             android:layout_height="180dp"
             android:layout_marginBottom="20dp"
-            android:background="@drawable/control_center_hero_background"
-            android:padding="20dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|start"
-                android:lineSpacingExtra="2dp"
-                android:text="@string/control_center_hero_title"
-                android:textColor="@android:color/white"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-        </FrameLayout>
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_control_center_main_banner" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -94,10 +83,16 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_resize" />
+
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="38dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/control_center_row_resize"
                     android:textColor="@android:color/black"
@@ -126,10 +121,16 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_custom_control" />
+
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="38dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/control_center_row_custom_controls"
                     android:textColor="@android:color/black"
@@ -158,10 +159,16 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_vibration" />
+
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="38dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/control_center_row_vibration"
                     android:textColor="@android:color/black"
@@ -189,10 +196,16 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_night_shift" />
+
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="38dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/control_center_row_night_shift"
                     android:textColor="@android:color/black"
@@ -221,10 +234,16 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_setup_record" />
+
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="38dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/control_center_row_setup_record"
                     android:textColor="@android:color/black"

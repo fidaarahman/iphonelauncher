@@ -19,6 +19,14 @@
     <string name="control_center_row_night_shift">Night Shift</string>
     <string name="control_center_row_setup_record">Setup The Record</string>
 
+    <string name="search_hint">Search</string>
+    <string name="search_cancel">Cancel</string>
+    <string name="search_suggestions_header">Suggestions</string>
+    <string name="search_apps_header">Apps</string>
+    <string name="search_contacts_header">Contacts</string>
+    <string name="search_contacts_permission_message">No READ CONTACT permission, grant the permission to search contact</string>
+    <string name="search_grant_permission">GRANT PERMISSION</string>
+
     <string name="settings_default_launcher_title">Set as Default Launcher</string>
     <string name="settings_default_launcher_subtitle">Set Launcher OS 18 as default for the best experience.</string>
     <string name="settings_row_default_home_screen">Select Default Home Screen</string>

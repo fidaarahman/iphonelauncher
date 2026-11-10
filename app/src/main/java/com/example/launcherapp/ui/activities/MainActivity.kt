@@ -9,6 +9,9 @@ import android.provider.Settings
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.example.launcherapp.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -34,6 +37,7 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemBarInsets()
 
         binding.switchDefaultLauncher.isChecked = isAppDefaultHome()
         binding.switchDefaultLauncher.setOnClickListener {
@@ -46,6 +50,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.switchDefaultLauncher.isChecked = isAppDefaultHome()
+    }
+
+    /** Pushes the scrollable content below the status bar / above the nav bar - enableEdgeToEdge() draws under both by design, so something has to consume the insets. */
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.mainScroll) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(left = bars.left, top = bars.top, right = bars.right, bottom = bars.bottom)
+            insets
+        }
     }
 
     private fun isAppDefaultHome(): Boolean {
