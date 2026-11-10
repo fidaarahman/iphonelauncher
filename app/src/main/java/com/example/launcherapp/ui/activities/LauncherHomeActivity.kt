@@ -256,7 +256,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                             flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
                 )
             }
-            .sortedBy { it.label.lowercase() }
+            .sortedBy { it.installTime }
     }
 
     /**

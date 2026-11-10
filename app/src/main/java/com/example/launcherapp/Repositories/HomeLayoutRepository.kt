@@ -72,7 +72,7 @@ class HomeLayoutRepository(private val context: Context) {
 
         val model = HomeModel(pages, dock)
         apps.filter { it.key !in placed }
-            .sortedBy { it.label.lowercase() }
+            .sortedBy { it.installTime }
             .forEach { model.append(it.key) }
         model.trimEmptyPages()
         return model

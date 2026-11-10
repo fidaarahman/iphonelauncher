@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.provider.AlarmClock
 import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -27,8 +28,13 @@ class IosIconProvider(private val context: Context) {
     /** packageName -> drawable res id. Built once, on first use (thread-safe). */
     private val overrides: Map<String, Int> by lazy { buildOverrides() }
 
-    fun iconFor(packageName: String): Drawable? =
-        overrides[packageName]?.let { ContextCompat.getDrawable(context, it) }
+    /** The device's default calendar app - drawn live instead of from a static image, so the day shown is always today's. */
+    private val calendarPackage: String? by lazy { defaultHandler(category(Intent.CATEGORY_APP_CALENDAR)) }
+
+    fun iconFor(packageName: String): Drawable? {
+        if (packageName == calendarPackage) return LiveCalendarIcon.draw(context)
+        return overrides[packageName]?.let { ContextCompat.getDrawable(context, it) }
+    }
 
     private fun buildOverrides(): Map<String, Int> {
         val result = HashMap<String, Int>()
@@ -69,7 +75,11 @@ class IosIconProvider(private val context: Context) {
         category(Intent.CATEGORY_APP_EMAIL) to "ic_mail",
         category(Intent.CATEGORY_APP_MAPS) to "ic_maps",
         category(Intent.CATEGORY_APP_MUSIC) to "ic_music",
-        Intent(Settings.ACTION_SETTINGS) to "ic_setting"
+        Intent(Settings.ACTION_SETTINGS) to "ic_setting",
+        Intent(AlarmClock.ACTION_SHOW_ALARMS) to "ic_clock",
+        category(Intent.CATEGORY_APP_CONTACTS) to "ic_contacts",
+        category(Intent.CATEGORY_APP_CALCULATOR) to "ic_calculator",
+        category(Intent.CATEGORY_APP_FILES) to "ic_files"
     )
 
     private fun category(category: String) = Intent(Intent.ACTION_MAIN).addCategory(category)
@@ -80,7 +90,28 @@ class IosIconProvider(private val context: Context) {
         /** Apps with no standard role - matched by package name. */
         private val PACKAGE_ICONS = mapOf(
             "com.android.vending" to "ic_playstore",  // Play Store
-            "com.google.android.keep" to "ic_notes"   // Google Keep
+            "com.google.android.keep" to "ic_notes",  // Google Keep
+            "com.google.android.apps.tasks" to "ic_reminders",   // Google Tasks
+            "com.samsung.android.app.reminder" to "ic_reminders", // Samsung Reminder
+            "com.microsoft.todos" to "ic_reminders",  // Microsoft To Do
+            // Calculator: most OEMs don't declare CATEGORY_APP_CALCULATOR, so match by package too.
+            "com.google.android.calculator" to "ic_calculator",       // Pixel / AOSP
+            "com.android.calculator2" to "ic_calculator",             // Older AOSP/stock
+            "com.sec.android.app.popupcalculator" to "ic_calculator", // Samsung
+            "com.miui.calculator" to "ic_calculator",                 // Xiaomi/MIUI/Poco
+            "com.coloros.calculator" to "ic_calculator",              // Oppo/Realme (ColorOS/RealmeUI)
+            "com.oppo.calculator" to "ic_calculator",                 // Older Oppo
+            "com.oneplus.calculator" to "ic_calculator",              // OnePlus
+            "com.vivo.calculator" to "ic_calculator",                 // Vivo (FunTouch/OriginOS)
+            "com.htc.calculator" to "ic_calculator",                  // HTC
+            "com.asus.calculator" to "ic_calculator",                 // Asus (ZenUI)
+            "com.huawei.calculator" to "ic_calculator",               // Huawei (EMUI)
+            "com.hihonor.calculator" to "ic_calculator",              // Honor (MagicOS, split from Huawei)
+            "com.lge.calculator" to "ic_calculator",                  // LG
+            "com.motorola.calculator2" to "ic_calculator",            // Motorola
+            "com.sonymobile.calculator" to "ic_calculator",           // Sony
+            "com.zte.calculator" to "ic_calculator",                  // ZTE
+            "com.meizu.flyme.calculator" to "ic_calculator"           // Meizu (Flyme)
         )
     }
 }
