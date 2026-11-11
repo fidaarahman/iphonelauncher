@@ -12,8 +12,10 @@ import android.location.LocationManager
 import android.net.Uri
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -54,6 +56,7 @@ import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityLauncherHomeBinding
 import com.example.launcherapp.utils.AppLaunchTracker
 import com.example.launcherapp.utils.DragController
+import com.example.launcherapp.utils.SessionManager
 import com.example.launcherapp.ui.adapters.AppLibraryAdapter
 import com.example.launcherapp.ui.model.AppCategorizer
 import com.example.launcherapp.ui.model.AppLibraryBuilder
@@ -63,11 +66,16 @@ import com.example.launcherapp.Repositories.HomeLayoutRepository
 import com.example.launcherapp.ui.model.HomeModel
 import com.example.launcherapp.Repositories.FirstScreenPolicy
 import com.example.launcherapp.Repositories.defaultHandlerPackage
+import com.example.launcherapp.ui.icons.DuotoneIconFilter
 import com.example.launcherapp.ui.icons.FolderIcon
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
 import com.example.launcherapp.ui.menu.AppContextMenu
 import com.example.launcherapp.ui.model.SunCalculator
+import com.example.launcherapp.ui.model.ThemePack
+import com.example.launcherapp.ui.model.ThemePacks
+import com.example.launcherapp.ui.views.ClockWidgetView
+import com.example.launcherapp.utils.HomeWallpaperStore
 import com.example.launcherapp.views.HomeCellLayout
 import com.example.launcherapp.views.SunArcView
 import kotlin.concurrent.thread
@@ -78,6 +86,7 @@ import kotlin.random.Random
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
@@ -100,6 +109,16 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     private var appsByKey: Map<String, LauncherAppEntry> = emptyMap()
     private var appLibraryGroups: List<AppLibraryGroup> = emptyList()
+
+    // Theme Packs: active pack (if any) and its duotone-recolored icons, keyed by "themeId:appKey".
+    // Concurrent: icons are recoloured on background threads and read on the main thread.
+    private var activeTheme: ThemePack? = null
+    private val themedIconCache = ConcurrentHashMap<String, Drawable>()
+
+    // Background currently shown ("themeId|wallpaper signature") and the latest background request,
+    // so a slow wallpaper load can never overwrite a newer one.
+    private var appliedBackground: String? = null
+    private var backgroundRequest = 0
 
     /** Real apps currently bundled inside the "Google" folder icon - populated each load. */
     private var googleFolderMembers: List<LauncherAppEntry> = emptyList()
@@ -158,6 +177,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private var pageDots: List<View> = emptyList()
     private val restoreSearchPill = Runnable { showSearchPill(true) }
 
+    /** Whether the previously selected page had its chrome hidden (App Library / widgets page). */
+    private var wasOnHiddenChromePage = false
+
     /**
      * Which view currently represents each app key, per page. This is the single source of
      * truth for reuse/cleanup in [renderPage] - we never rebuild it by scanning the ViewGroup's
@@ -213,15 +235,166 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
     override fun onResume() {
         super.onResume()
-        // Picks up a wallpaper change made via the Wallpapers tile (ACTION_SET_WALLPAPER),
-        // which returns here without any callback we can otherwise listen for.
-        applyDeviceWallpaper()
+        // Picks up a wallpaper change made via the Wallpapers tile, or a theme pack applied from
+        // the Theme Packs screen - neither reports back with a callback we can otherwise listen for.
+        applyThemeOrDeviceWallpaper()
+    }
+
+    /**
+     * Applies the selected theme pack (if any):
+     * - icons, App Library, folder and clock in the theme colour (icons recoloured in the background);
+     * - dock stays light glass (a solid tint made it a coloured box);
+     * - background, see [updateBackground].
+     */
+    private fun applyThemeOrDeviceWallpaper() {
+        val theme = ThemePacks.find(SessionManager.getString(ThemePacks.PREF_KEY, "").ifEmpty { null })
+        if (theme?.id != activeTheme?.id) {
+            activeTheme = theme
+            themedIconCache.clear()
+            prepareThemedIconsInBackground(theme)
+        }
+        binding.dock.backgroundTintList = null
+        applyClockTheme()
+        updateBackground(theme)
+    }
+
+
+    /**
+     * Background rules (like the theme apps):
+     * - theme + no wallpaper picked   -> the theme's gradient
+     * - theme + wallpaper picked      -> that wallpaper with a LIGHT theme tint (see themeAmount)
+     * - no theme + wallpaper picked   -> that wallpaper as it is
+     * - no theme + no wallpaper       -> the device wallpaper, as before
+     * The picked wallpaper is the launcher's own copy (HomeWallpaperStore), loaded and tinted
+     * off the main thread.
+     */
+    private fun updateBackground(theme: ThemePack?) {
+        val hasWallpaper = HomeWallpaperStore.hasWallpaper()
+        if (theme == null && !hasWallpaper) {
+            appliedBackground = null
+            backgroundRequest++
+            applyDeviceWallpaper()
+            return
+        }
+        val signature = "${theme?.id}|${HomeWallpaperStore.signature()}"
+        if (signature == appliedBackground) return
+        appliedBackground = signature
+        val request = ++backgroundRequest
+
+        if (theme != null && !hasWallpaper) {
+            binding.wallpaper.setImageDrawable(themeGradient(theme))
+            binding.wallpaper.isVisible = true
+            return
+        }
+        val metrics = resources.displayMetrics
+        thread(name = "home-wallpaper") {
+            // How strongly the theme colours the user's own wallpaper: 0 = not at all, 1 = fully.
+            // Keep the same value in SearchActivity.applyBackground().
+            val themeAmount = 0.35f
+            val bitmap = HomeWallpaperStore.load(this, metrics.widthPixels, metrics.heightPixels)
+            val shown = if (bitmap != null && theme != null) {
+                DuotoneIconFilter.recolor(bitmap, theme.dockAccent, inPlace = true, amount = themeAmount)
+            } else {
+                bitmap
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || request != backgroundRequest) return@runOnUiThread
+                when {
+                    shown != null -> {
+                        binding.wallpaper.setImageBitmap(shown)
+                        binding.wallpaper.isVisible = true
+                    }
+                    theme != null -> {
+                        binding.wallpaper.setImageDrawable(themeGradient(theme))
+                        binding.wallpaper.isVisible = true
+                    }
+                    else -> applyDeviceWallpaper()
+                }
+            }
+        }
+    }
+
+    private fun themeGradient(theme: ThemePack) =
+        GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(softenBackgroundColor(theme.gradientStart), softenBackgroundColor(theme.gradientEnd))
+        )
+
+
+    private fun softenBackgroundColor(color: Int): Int {
+        val strength = 0.3f
+        return androidx.core.graphics.ColorUtils.blendARGB(color, 0xFFE5E5EA.toInt(), strength)
+    }
+
+    /**
+     * Recolours every app icon for [theme] on a background thread, then swaps them in all at once
+     * (no theme = original icons straight away).
+     */
+    private fun prepareThemedIconsInBackground(theme: ThemePack?) {
+        if (theme == null) {
+            refreshThemedIcons()
+            return
+        }
+        val apps = appsByKey.values.toList()
+        thread(name = "theme-icons") {
+            val themed = apps.associate { "${theme.id}:${it.key}" to DuotoneIconFilter.apply(it.icon, theme.dockAccent, resources) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || activeTheme?.id != theme.id) return@runOnUiThread
+                themedIconCache.putAll(themed)
+                refreshThemedIcons()
+            }
+        }
+    }
+
+    /** Theme colour on the home-screen clock widget (null = the original black clock). */
+    /** Theme colour on the home-screen clock widget (null = the original black clock). Muted tone, same as the icons. */
+    private fun applyClockTheme() {
+        val color = activeTheme?.let { DuotoneIconFilter.toneOf(it.dockAccent) }
+        pageViews.values.forEach { views -> views[CLOCK_WIDGET_KEY]?.let { findClock(it)?.setThemeColor(color) } }
+    }
+
+    private fun findClock(view: View): ClockWidgetView? {
+        if (view is ClockWidgetView) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) findClock(view.getChildAt(i))?.let { return it }
+        }
+        return null
     }
 
     /** Shows the device's actual current wallpaper instead of the bundled placeholder image. */
+    /**
+     * Shows the user's REAL phone wallpaper. Android draws it behind this window
+     * (Theme.LauncherApp.Home has windowShowWallpaper=true + a transparent background),
+     * so we only clear and hide our own wallpaper ImageView. Nothing is read or changed.
+     */
     private fun applyDeviceWallpaper() {
-        val drawable = runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull() ?: return
-        binding.wallpaper.setImageDrawable(drawable)
+        binding.wallpaper.setImageDrawable(null)
+        binding.wallpaper.isVisible = false
+    }
+    /** Re-binds every currently visible icon (home pages + dock + App Library) so a just-changed theme takes effect immediately, without reloading the app list. */
+    private fun refreshThemedIcons() {
+        pageViews.values.forEach { viewsByKey ->
+            viewsByKey.forEach { (key, cellView) ->
+                val app = appsByKey[key] ?: return@forEach
+                cellView.findViewById<ImageView>(R.id.appIcon)?.setImageDrawable(iconDrawableFor(app))
+            }
+        }
+        refreshDock()
+        refreshLibraryIfAttached()
+    }
+
+    private fun refreshLibraryIfAttached() {
+        val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return
+        val holder = recycler.findViewHolderForAdapterPosition(libraryPosition()) as? HomePagerAdapter.LibraryViewHolder ?: return
+        bindLibraryPage(holder.root)
+    }
+
+    /** The real icon, duotone-recolored to the active theme pack (shape stays recognizable) - or the real icon unchanged if no theme is applied. */
+    private fun iconDrawableFor(app: LauncherAppEntry): Drawable {
+        val theme = activeTheme ?: return app.icon
+        return themedIconCache.getOrPut("${theme.id}:${app.key}") {
+            DuotoneIconFilter.apply(app.icon, theme.dockAccent, resources)
+        }
     }
 
     override fun onDestroy() {
@@ -291,6 +464,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
      */
     private fun loadHomeInBackground() {
         val generation = layoutGeneration
+        // Read from the saved setting (not activeTheme): on the very first load onResume() hasn't
+        // run yet, and the icons should still be recoloured here, off the main thread.
+        val theme = ThemePacks.find(SessionManager.getString(ThemePacks.PREF_KEY, "").ifEmpty { null })
         thread(name = "launcher-load-apps") {
             val apps = loadLaunchableApps()
             // Non-essential Google apps are bundled into one "Google" folder icon instead of
@@ -317,6 +493,12 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             val loaded = layoutRepository.load(homeGridApps, dockPackages)
             val suggested = suggestionsFor(apps)
             val libraryGroups = AppLibraryBuilder.build(apps, suggested)
+            // With a theme on, recolour the (re)loaded icons here, off the main thread.
+            val themedIcons = theme?.let { t ->
+                (apps + listOfNotNull(folderEntry)).associate {
+                    "${t.id}:${it.key}" to DuotoneIconFilter.apply(it.icon, t.dockAccent, resources)
+                }
+            }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (dragController.isDragging) {
@@ -329,6 +511,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                     return@runOnUiThread
                 }
                 appsByKey = (apps + listOfNotNull(folderEntry)).associateBy { it.key }
+                if (themedIcons != null && activeTheme?.id == theme?.id) {
+                    themedIconCache.clear()
+                    themedIconCache.putAll(themedIcons)
+                }
                 googleFolderMembers = folderMembers
                 appLibraryGroups = libraryGroups
                 model = loaded
@@ -446,15 +632,6 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // Pages
     // ---------------------------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------------------------
-    // Pager position <-> home-page-index translation.
-    // Adapter position order: Today View widgets, home[0..N], App Library. The widgets page sits
-    // BEFORE home page 1, reached by swiping backward from it - setupPager() sets the initial
-    // position to home index 0 so launch still lands on the real home page, not the widgets page.
-    // Every other part of the activity (DragController.Host included) speaks in home index;
-    // only these functions and the ViewPager2 callbacks below ever touch a raw position.
-    // -----------------------------------------------------------------------------------------
-
     private fun widgetsPosition() = 0
     private fun libraryPosition() = model.pages.size + 1
 
@@ -490,27 +667,29 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.homePager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 updatePageDots(homeIndexForPosition(position) ?: -1)
-                // Neither the App Library nor the widgets page has a page dot, dock, or search
-                // pill - the widgets page has its own embedded search bar instead, same as iOS
-                // hides the dock on Today View.
-                val onLibraryPage = position == libraryPosition()
-                val onWidgetsPage = position == widgetsPosition()
-                val hideChrome = onLibraryPage || onWidgetsPage
-                binding.pageIndicator.isVisible = !hideChrome
-                // Faded-out dock/pill are made INVISIBLE too: they sit on top of the library now that
-                // the pager is full height, and invisible-but-clickable icons would steal its taps.
+                // Neither the App Library nor the widgets page has a page dot, dock, or search pill.
+                val hideChrome = position == libraryPosition() || position == widgetsPosition()
+                // Faded-out dock/pill are made INVISIBLE too, so they can't steal taps on those pages.
                 fadeTo(binding.dock, visible = !hideChrome)
                 if (hideChrome) {
                     binding.root.removeCallbacks(restoreSearchPill)
+                    hidePageDotsNow(keepInLayout = false)
                     fadeTo(binding.searchPill, visible = false)
-                } else if (!binding.searchPill.isVisible) {
+                } else if (wasOnHiddenChromePage) {
+                    // Back from the widgets page / App Library: show ONLY the pill. The dots come back
+                    // with opacity 0, so they can't appear next to it - they fade in again on the next
+                    // swipe via onPageScrollStateChanged, as usual.
+                    binding.root.removeCallbacks(restoreSearchPill)
+                    hidePageDotsNow(keepInLayout = true)
                     fadeTo(binding.searchPill, visible = true)
                 }
+                wasOnHiddenChromePage = hideChrome
             }
 
             override fun onPageScrollStateChanged(state: Int) {
                 // App Library / widgets page: no pill/dots to swap.
-                if (binding.homePager.currentItem == libraryPosition() || binding.homePager.currentItem == widgetsPosition()) return
+                val current = binding.homePager.currentItem
+                if (current == libraryPosition() || current == widgetsPosition()) return
                 // iOS: the "Search" pill turns into page dots while swiping.
                 binding.root.removeCallbacks(restoreSearchPill)
                 if (state == ViewPager2.SCROLL_STATE_IDLE) {
@@ -522,24 +701,17 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         })
     }
 
+
     /**
-     * Draws one page from the model (or from the drag preview, which has an empty slot where
-     * the dragged icon would land). With [rebuild] = false existing views are reused and only
-     * moved (see [viewsFor]), and [animateMoves] slides them smoothly to their new spot instead
-     * of just snapping - the iOS rearrange feel, without ever re-deriving "what's on screen" by
-     * scanning the ViewGroup.
+     * Puts the page dots at opacity 0 immediately (no fade). [keepInLayout] = true keeps them
+     * VISIBLE (at opacity 0) so the next swipe can fade them in; false hides them completely.
      */
-    /**
-     * The pager is full height (so the App Library reaches the bottom of the screen). Home pages
-     * get this much bottom padding so their icons stay above the search pill and dock, exactly
-     * where they were before. Measured from the real layout, so it's right on every screen size.
-     *
-     * Seeded with a generous guess (dock + pill + their margins) instead of 0: the real
-     * measurement only arrives once the layout-change listener fires, and pages can render
-     * before that first firing - with 0 here, that first render would place the bottom row of
-     * icons flush against the screen edge, underneath the dock, making them unreachable until a
-     * later refresh corrected it.
-     */
+    private fun hidePageDotsNow(keepInLayout: Boolean) {
+        binding.pageIndicator.animate().cancel()
+        binding.pageIndicator.alpha = 0f
+        binding.pageIndicator.isVisible = keepInLayout
+    }
+
     private var homePageBottomSpace = 0
 
     private fun watchHomePageBottomSpace() {
@@ -651,12 +823,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         cells.requestLayout()
     }
 
-    /**
-     * Slides each reused icon from where it was to where it's about to land, instead of letting
-     * it jump. Classic FLIP technique: let the layout pass happen first (so every view already
-     * has its final position), then on the next frame compute the delta from the old position,
-     * pre-offset the view by that delta, and animate the offset back to zero.
-     */
+
     private fun animateMoves(cells: HomeCellLayout, views: Map<String, View>, startPositions: Map<String, Pair<Int, Int>>) {
         cells.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
@@ -679,7 +846,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun createAppCell(parent: ViewGroup, app: LauncherAppEntry): View {
         val cell = layoutInflater.inflate(R.layout.item_home_app, parent, false)
         val icon = cell.findViewById<ImageView>(R.id.appIcon)
-        icon.setImageDrawable(app.icon)
+        icon.setImageDrawable(iconDrawableFor(app))
         cell.findViewById<TextView>(R.id.appLabel).text = app.label
         cell.contentDescription = app.label
         attachIconInteractions(touchTarget = cell, iconView = icon, key = app.key, withMenu = true)
@@ -690,7 +857,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun bindLibraryPage(root: ViewGroup) {
         val list = root.findViewById<RecyclerView>(R.id.libraryGroups)
         if (list.layoutManager == null) list.layoutManager = GridLayoutManager(this, 2)
-        list.adapter = AppLibraryAdapter(appLibraryGroups) { app -> launchApp(app) }
+        list.adapter = AppLibraryAdapter(appLibraryGroups, iconFor = ::iconDrawableFor) { app -> launchApp(app) }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -807,6 +974,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun createClockWidget(parent: ViewGroup): View =
         layoutInflater.inflate(R.layout.item_home_clock_widget, parent, false).apply {
             setOnClickListener { openClockApp() }
+            findClock(this)?.setThemeColor(activeTheme?.let { DuotoneIconFilter.toneOf(it.dockAccent) })
         }
 
     // ---------------------------------------------------------------------------------------
@@ -824,7 +992,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             if (app == null) {
                 icon.visibility = View.INVISIBLE // empty slot of the drag preview
             } else {
-                icon.setImageDrawable(app.icon)
+                icon.setImageDrawable(iconDrawableFor(app))
                 icon.contentDescription = app.label
                 // Dock: long-press still drags straight away (menu for the dock decided later).
                 attachIconInteractions(touchTarget = icon, iconView = icon, key = app.key, withMenu = false)
@@ -873,7 +1041,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         menuDownY = lastTouchRawY
         val isRealApp = key != FirstScreenPolicy.GOOGLE_FOLDER_KEY
         contextMenu.show(
-            key, iconView, appsByKey[key]?.icon,
+            key, iconView, appsByKey[key]?.let(::iconDrawableFor),
             showAppInfo = isRealApp,
             canDelete = canDelete(key)
         )
@@ -1019,7 +1187,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // DragController.Host
     // ---------------------------------------------------------------------------------------
 
-    override fun appIcon(key: String): Drawable? = appsByKey[key]?.icon
+    override fun appIcon(key: String): Drawable? = appsByKey[key]?.let(::iconDrawableFor)
 
     override fun pagePosition(page: Int) = positionForHomeIndex(page)
 
@@ -1159,7 +1327,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.folderGrid.removeAllViews()
         googleFolderMembers.forEach { app ->
             val cell = layoutInflater.inflate(R.layout.item_folder_app, binding.folderGrid, false)
-            cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(app.icon)
+            cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(iconDrawableFor(app))
             cell.findViewById<TextView>(R.id.appLabel).text = app.label
             cell.setOnClickListener {
                 closeFolder()

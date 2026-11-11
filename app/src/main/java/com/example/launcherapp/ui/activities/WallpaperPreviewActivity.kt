@@ -16,14 +16,10 @@ import androidx.core.view.updatePadding
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityWallpaperPreviewBinding
 import com.example.launcherapp.databinding.DialogSetWallpaperBinding
+import com.example.launcherapp.utils.HomeWallpaperStore
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlin.concurrent.thread
 
-/**
- * Full-screen preview of a single wallpaper (bundled drawable or a picked photo Uri). "Set
- * Wallpaper" opens a sheet to choose Lock Screen / Home Screen / Both, then actually applies it
- * via WallpaperManager and reports back to [WallpaperPickerActivity] so it can finish too.
- */
 class WallpaperPreviewActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityWallpaperPreviewBinding
@@ -113,10 +109,22 @@ class WallpaperPreviewActivity : AppCompatActivity() {
                     Target.BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                 }
                 manager.setBitmap(bitmap, null, true, flags)
+                // The launcher's own copy for its home screen (it can't reliably read the phone's
+                // wallpaper back, and theme packs need to know a wallpaper was picked).
+                if (target != Target.LOCK_SCREEN) saveHomeCopy(bitmap)
             }.isSuccess
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) onDone(success)
             }
+        }
+    }
+
+    /** Bundled wallpaper: saved by name. Uploaded photo: a screen-sized copy in the app's storage. */
+    private fun saveHomeCopy(bitmap: Bitmap) {
+        if (resId != -1) {
+            HomeWallpaperStore.saveResource(this, resId)
+        } else {
+            HomeWallpaperStore.saveBitmap(this, bitmap)
         }
     }
 

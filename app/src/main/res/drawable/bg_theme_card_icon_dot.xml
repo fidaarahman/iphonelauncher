@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Purely decorative filler for the theme card's mini icon grid - not a real app. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#CC1C1C1E" />
+    <corners android:radius="6dp" />
+</shape>

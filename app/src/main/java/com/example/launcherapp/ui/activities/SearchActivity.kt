@@ -1,7 +1,6 @@
 package com.example.launcherapp.ui.activities
 
 import android.Manifest
-import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +8,7 @@ import android.content.pm.ResolveInfo
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
@@ -17,7 +17,6 @@ import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.GridLayout
@@ -34,9 +33,14 @@ import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.R
 import com.example.launcherapp.Repositories.defaultHandlerPackage
 import com.example.launcherapp.databinding.ActivitySearchBinding
+import com.example.launcherapp.ui.icons.DuotoneIconFilter
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
+import com.example.launcherapp.ui.model.ThemePack
+import com.example.launcherapp.ui.model.ThemePacks
 import com.example.launcherapp.utils.AppLaunchTracker
+import com.example.launcherapp.utils.HomeWallpaperStore
+import com.example.launcherapp.utils.SessionManager
 import kotlin.concurrent.thread
 
 
@@ -46,6 +50,12 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var iosIcons: IosIconProvider
     private lateinit var iconShaper: IconShaper
     private var allApps: List<LauncherAppEntry> = emptyList()
+
+    /** Theme pack active when the screen opened (null = Default). */
+    private var activeTheme: ThemePack? = null
+
+    /** Ignores an older background load if a newer one started (e.g. quick resume). */
+    private var backgroundRequest = 0
 
     private val requestContactsPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -61,12 +71,16 @@ class SearchActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        // Let Android draw the user's real wallpaper behind this screen (same as the home screen).
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         binding = ActivitySearchBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applySystemBarInsets()
 
         iosIcons = IosIconProvider(this)
         iconShaper = IconShaper(this)
+        activeTheme = currentTheme()
 
         binding.searchCancel.setOnClickListener { finish() }
         binding.searchMic.setOnClickListener { startVoiceSearch() }
@@ -89,13 +103,74 @@ class SearchActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        applyDeviceWallpaper()
+        applyBackground()
     }
 
-    /** Shows the device's actual current wallpaper instead of the bundled placeholder image. */
-    private fun applyDeviceWallpaper() {
-        val drawable = runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull() ?: return
+    // -----------------------------------------------------------------------------------------
+    // Background (same rules as the home screen)
+    // -----------------------------------------------------------------------------------------
+
+    private fun currentTheme(): ThemePack? =
+        ThemePacks.find(SessionManager.getString(ThemePacks.PREF_KEY, "").ifEmpty { null })
+
+    private fun applyBackground() {
+        val theme = currentTheme()
+        val hasWallpaper = HomeWallpaperStore.hasWallpaper()
+        val request = ++backgroundRequest
+
+        if (theme == null && !hasWallpaper) {
+            showDeviceWallpaper()
+            return
+        }
+        if (theme != null && !hasWallpaper) {
+            showBackground(themeGradient(theme))
+            return
+        }
+        val metrics = resources.displayMetrics
+        thread(name = "search-wallpaper") {
+            // Same value as in LauncherHomeActivity.updateBackground(), so both screens match.
+            val themeAmount = 0.35f
+            val bitmap = HomeWallpaperStore.load(this, metrics.widthPixels, metrics.heightPixels)
+            val shown = if (bitmap != null && theme != null) {
+                DuotoneIconFilter.recolor(bitmap, theme.dockAccent, inPlace = true, amount = themeAmount)
+            } else {
+                bitmap
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || request != backgroundRequest) return@runOnUiThread
+                when {
+                    shown != null -> {
+                        binding.searchWallpaper.setImageBitmap(shown)
+                        binding.searchWallpaper.isVisible = true
+                    }
+                    theme != null -> showBackground(themeGradient(theme))
+                    else -> showDeviceWallpaper()
+                }
+            }
+        }
+    }
+    private fun showBackground(drawable: Drawable) {
         binding.searchWallpaper.setImageDrawable(drawable)
+        binding.searchWallpaper.isVisible = true
+    }
+
+    /** The real phone wallpaper shows through (FLAG_SHOW_WALLPAPER) - we just hide our own image. */
+    private fun showDeviceWallpaper() {
+        binding.searchWallpaper.setImageDrawable(null)
+        binding.searchWallpaper.isVisible = false
+    }
+
+    /** Same gradient as the home screen (softened the same way). */
+    private fun themeGradient(theme: ThemePack) =
+        GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(softenBackgroundColor(theme.gradientStart), softenBackgroundColor(theme.gradientEnd))
+        )
+
+    /** Keep `strength` the same as in LauncherHomeActivity so both screens match. */
+    private fun softenBackgroundColor(color: Int): Int {
+        val strength = 0.3f
+        return androidx.core.graphics.ColorUtils.blendARGB(color, 0xFFE5E5EA.toInt(), strength)
     }
 
     /** Pushes content below the status bar / above the nav bar, and above the keyboard once it's shown - edge-to-edge draws under all three by default, so something has to consume the insets. */
@@ -158,9 +233,12 @@ class SearchActivity : AppCompatActivity() {
 
     private fun buildEntry(info: ResolveInfo, label: String): LauncherAppEntry {
         val packageName = info.activityInfo.packageName
+        val shaped = iconShaper.shape(iosIcons.iconFor(packageName) ?: info.loadIcon(packageManager))
+        // Same themed icon as the home screen when a theme pack is active.
+        val icon = activeTheme?.let { DuotoneIconFilter.apply(shaped, it.dockAccent, resources) } ?: shaped
         return LauncherAppEntry(
             label = label,
-            icon = iconShaper.shape(iosIcons.iconFor(packageName) ?: info.loadIcon(packageManager)),
+            icon = icon,
             packageName = packageName,
             activityName = info.activityInfo.name
         )

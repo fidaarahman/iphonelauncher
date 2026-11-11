@@ -56,6 +56,9 @@
             android:name=".ui.activities.WallpaperPreviewActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.activities.ThemePacksActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.activities.LauncherHomeActivity"
             android:exported="true"
             android:launchMode="singleTask"
