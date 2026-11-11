@@ -40,6 +40,7 @@ object SessionManager {
     }
 
     fun getString(key: String, defVal: String): String {
+
         return preferences.getString(key, defVal).toString()
     }
 

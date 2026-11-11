@@ -42,6 +42,10 @@ class WallpaperPickerActivity : AppCompatActivity() {
         binding.tileWallpaper3.setOnClickListener { openPreview(resId = R.drawable.walpaper_3) }
         binding.tileWallpaper4.setOnClickListener { openPreview(resId = R.drawable.walpaper_4) }
         binding.tileWallpaper5.setOnClickListener { openPreview(resId = R.drawable.walpaper_5) }
+        binding.tileWallpaper6.setOnClickListener { openPreview(resId = R.drawable.walpaper_6) }
+        binding.tileWallpaper7.setOnClickListener { openPreview(resId = R.drawable.walpaper_7) }
+        binding.tileWallpaper8.setOnClickListener { openPreview(resId = R.drawable.walpaper_8) }
+        binding.tileWallpaper9.setOnClickListener { openPreview(resId = R.drawable.walpaper_9) }
     }
 
     private fun openPreview(resId: Int? = null, uri: Uri? = null) {

@@ -12,13 +12,7 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.min
 
-/**
- * White iOS Clock widget (Figma widgets page): white rounded tile, 60 tick marks (hour ticks
- * darker and longer), the numbers 12 / 3 / 6 / 9, city code under the 12, black hour/minute
- * hands and an orange second hand. Live: redraws every second while the page is visible.
- *
- * The dark home-screen clock (ClockWidgetView) is untouched.
- */
+
 class LightClockWidgetView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
