@@ -48,4 +48,13 @@
     <string name="settings_row_share_app">Share App</string>
     <string name="settings_row_feedback">FeedBack</string>
     <string name="settings_row_privacy_policy">Privacy Policy</string>
+
+    <string name="wallpaper_picker_title">Select Wallpaper</string>
+    <string name="wallpaper_preview_set_button">Set Wallpaper</string>
+    <string name="wallpaper_sheet_title">Set Wallpaper</string>
+    <string name="wallpaper_sheet_lock_screen">Set on Lock Screen</string>
+    <string name="wallpaper_sheet_home_screen">Set as home screen</string>
+    <string name="wallpaper_sheet_both">Set on both</string>
+    <string name="wallpaper_sheet_apply">Apply</string>
+    <string name="wallpaper_apply_failed">Couldn\'t set wallpaper</string>
 </resources>

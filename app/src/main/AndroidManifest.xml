@@ -11,6 +11,8 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER_HINTS" />
 
     <queries>
         <intent>
@@ -47,6 +49,12 @@
             android:name=".ui.activities.SearchActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.activities.WallpaperPickerActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.activities.WallpaperPreviewActivity"
+            android:exported="false" />
         <activity
             android:name=".ui.activities.LauncherHomeActivity"
             android:exported="true"

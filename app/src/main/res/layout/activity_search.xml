@@ -12,6 +12,7 @@
     tools:context=".ui.activities.SearchActivity">
 
     <ImageView
+        android:id="@+id/searchWallpaper"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"

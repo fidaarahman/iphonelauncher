@@ -11,17 +11,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 
-/**
- * Replaces the icons of built-in apps with bundled iPhone-style icons.
- *
- * Apps are matched by ROLE, not by package name: "the default camera app gets ic_camera",
- * "the default browser gets ic_compass", etc. Package names differ between Samsung, Vivo,
- * Xiaomi... but these roles work on every phone.
- *
- * Images are looked up by name in res/drawable (ic_phone.png, ic_camera.png, ...).
- * If an image hasn't been added yet, that app simply keeps its own icon, so the project
- * builds and runs before all icons are in place.
- */
+
 class IosIconProvider(private val context: Context) {
 
     private val packageManager = context.packageManager

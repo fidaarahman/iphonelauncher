@@ -3,6 +3,7 @@ package com.example.launcherapp.ui.activities
 import android.Manifest
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -208,6 +209,19 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
 
         launcherApps?.registerCallback(packageCallback, Handler(Looper.getMainLooper()))
         loadHomeInBackground()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Picks up a wallpaper change made via the Wallpapers tile (ACTION_SET_WALLPAPER),
+        // which returns here without any callback we can otherwise listen for.
+        applyDeviceWallpaper()
+    }
+
+    /** Shows the device's actual current wallpaper instead of the bundled placeholder image. */
+    private fun applyDeviceWallpaper() {
+        val drawable = runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull() ?: return
+        binding.wallpaper.setImageDrawable(drawable)
     }
 
     override fun onDestroy() {
@@ -787,7 +801,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     }.getOrNull()
 
     private fun openWallpaperPicker() {
-        runCatching { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) }
+        startActivity(Intent(this, WallpaperPickerActivity::class.java))
     }
 
     private fun createClockWidget(parent: ViewGroup): View =

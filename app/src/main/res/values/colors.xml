@@ -7,4 +7,6 @@
     <color name="splash_title">#1C1C1E</color>
     <color name="splash_subtitle">#8E8E93</color>
     <color name="splash_dot">#29282D</color>
+
+    <color name="ios_green">#34C759</color>
 </resources>

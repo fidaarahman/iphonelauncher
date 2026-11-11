@@ -1,9 +1,14 @@
 package com.example.launcherapp.ui.activities
 
 import android.Manifest
+import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
@@ -89,11 +94,23 @@ class SearchActivity : AppCompatActivity() {
         updateContactsSection(currentQuery())
     }
 
-    /** Pushes content below the status bar / above the nav bar - edge-to-edge draws under both by default, so something has to consume the insets. */
+    override fun onResume() {
+        super.onResume()
+        applyDeviceWallpaper()
+    }
+
+    /** Shows the device's actual current wallpaper instead of the bundled placeholder image. */
+    private fun applyDeviceWallpaper() {
+        val drawable = runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull() ?: return
+        binding.searchWallpaper.setImageDrawable(drawable)
+    }
+
+    /** Pushes content below the status bar / above the nav bar, and above the keyboard once it's shown - edge-to-edge draws under all three by default, so something has to consume the insets. */
     private fun applySystemBarInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.searchColumn) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.updatePadding(top = bars.top, bottom = bars.bottom)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.updatePadding(top = bars.top, bottom = maxOf(bars.bottom, ime.bottom))
             insets
         }
     }
@@ -110,30 +127,53 @@ class SearchActivity : AppCompatActivity() {
     // Apps
     // -----------------------------------------------------------------------------------------
 
+    /** Cheap stand-in icon for apps we haven't icon-shaped yet - shaping is the slow part of loadApps(). */
+    private val placeholderIcon: Drawable by lazy { ColorDrawable(Color.TRANSPARENT) }
+
     private fun loadApps() {
         thread(name = "search-load-apps") {
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val apps = packageManager.queryIntentActivities(intent, 0)
-                .map { info ->
-                    val packageName = info.activityInfo.packageName
-                    LauncherAppEntry(
-                        label = info.loadLabel(packageManager).toString(),
-                        icon = iconShaper.shape(iosIcons.iconFor(packageName) ?: info.loadIcon(packageManager)),
-                        packageName = packageName,
-                        activityName = info.activityInfo.name
-                    )
-                }
-                .sortedBy { it.label.lowercase() }
+            val resolved = packageManager.queryIntentActivities(intent, 0)
+                .map { info -> info to info.loadLabel(packageManager).toString() }
+                .sortedBy { (_, label) -> label.lowercase() }
+            val infoByKey = resolved.associate { (info, _) ->
+                "${info.activityInfo.packageName}/${info.activityInfo.name}" to info
+            }
+
+            // Figure out which apps belong in Suggestions WITHOUT icon-shaping the whole app
+            // list first - that's what used to make Suggestions take a visible moment to appear.
+            val stubs = resolved.map { (info, label) ->
+                LauncherAppEntry(label, placeholderIcon, info.activityInfo.packageName, info.activityInfo.name)
+            }
+            val suggestedStubs = AppLaunchTracker.mostLaunched(stubs, limit = SUGGESTION_COUNT).ifEmpty { defaultSuggestions(stubs) }
+            val suggested = suggestedStubs.mapNotNull { stub -> infoByKey[stub.key]?.let { buildEntry(it, stub.label) } }
+
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                bindSuggestions(suggested)
+            }
+
+            val apps = resolved.map { (info, label) -> buildEntry(info, label) }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 allApps = apps
-                showSuggestions()
+                val query = currentQuery()
+                if (query.isNotEmpty()) updateAppResults(query)
             }
         }
     }
 
-    private fun showSuggestions() {
-        val suggested = AppLaunchTracker.mostLaunched(allApps, limit = SUGGESTION_COUNT).ifEmpty { defaultSuggestions() }
+    private fun buildEntry(info: ResolveInfo, label: String): LauncherAppEntry {
+        val packageName = info.activityInfo.packageName
+        return LauncherAppEntry(
+            label = label,
+            icon = iconShaper.shape(iosIcons.iconFor(packageName) ?: info.loadIcon(packageManager)),
+            packageName = packageName,
+            activityName = info.activityInfo.name
+        )
+    }
+
+    private fun bindSuggestions(suggested: List<LauncherAppEntry>) {
         binding.suggestedGrid.removeAllViews()
         val cellWidth = (SUGGESTION_CELL_DP * resources.displayMetrics.density).toInt()
         suggested.forEach { app ->
@@ -147,7 +187,7 @@ class SearchActivity : AppCompatActivity() {
     }
 
     /** Before this launcher has any usage history to learn from: a handful of common defaults. */
-    private fun defaultSuggestions(): List<LauncherAppEntry> = listOf(
+    private fun defaultSuggestions(source: List<LauncherAppEntry>): List<LauncherAppEntry> = listOf(
         Intent(Settings.ACTION_SETTINGS),
         category(Intent.CATEGORY_APP_GALLERY),
         category(Intent.CATEGORY_APP_MAPS),
@@ -159,7 +199,7 @@ class SearchActivity : AppCompatActivity() {
     )
         .mapNotNull { packageManager.defaultHandlerPackage(it) }
         .distinct()
-        .mapNotNull { pkg -> allApps.firstOrNull { it.packageName == pkg } }
+        .mapNotNull { pkg -> source.firstOrNull { it.packageName == pkg } }
         .take(SUGGESTION_COUNT)
 
     private fun category(category: String) = Intent(Intent.ACTION_MAIN).addCategory(category)
