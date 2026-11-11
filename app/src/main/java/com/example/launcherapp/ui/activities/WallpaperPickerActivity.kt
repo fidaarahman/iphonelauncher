@@ -14,12 +14,7 @@ import androidx.core.view.updatePadding
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityWallpaperPickerBinding
 
-/**
- * "Select Wallpaper" grid - bundled wallpapers plus an upload tile that opens the system photo
- * picker. Tapping any tile opens [WallpaperPreviewActivity] to actually apply it; this activity
- * just finishes itself once that reports back that a wallpaper was applied, so the user lands
- * back on the home screen.
- */
+
 class WallpaperPickerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityWallpaperPickerBinding

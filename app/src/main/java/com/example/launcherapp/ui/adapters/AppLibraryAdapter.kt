@@ -13,9 +13,12 @@ import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.R
 import com.example.launcherapp.ui.model.AppLibraryGroup
 
+
 class AppLibraryAdapter(
     private val groups: List<AppLibraryGroup>,
     private val onOpenGroup: ((AppLibraryGroup) -> Unit)? = null,
+    /** Which picture to show for an app - the activity passes the theme-recoloured icon. */
+    private val iconFor: (LauncherAppEntry) -> Drawable = { it.icon },
     private val onAppClick: (LauncherAppEntry) -> Unit
 ) : RecyclerView.Adapter<AppLibraryAdapter.TileViewHolder>() {
 
@@ -93,7 +96,7 @@ class AppLibraryAdapter(
             layoutParams = FrameLayout.LayoutParams(MATCH, MATCH)
             scaleType = ImageView.ScaleType.FIT_CENTER
             // Own copy: the same drawable is also shown on the home screen / in other tiles.
-            setImageDrawable(copyOf(app.icon))
+            setImageDrawable(copyOf(iconFor(app)))
             contentDescription = app.label
         }
 

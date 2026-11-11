@@ -257,8 +257,12 @@
                 android:background="#1F000000" />
 
             <LinearLayout
+                android:id="@+id/rowThemePacks"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"

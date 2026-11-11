@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.rowDefaultHomeScreen.setOnClickListener { requestDefaultHome() }
         binding.rowWallpaper.setOnClickListener { startActivity(Intent(this, WallpaperPickerActivity::class.java)) }
+        binding.rowThemePacks.setOnClickListener { startActivity(Intent(this, ThemePacksActivity::class.java)) }
     }
 
     override fun onResume() {

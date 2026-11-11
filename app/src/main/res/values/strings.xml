@@ -57,4 +57,10 @@
     <string name="wallpaper_sheet_both">Set on both</string>
     <string name="wallpaper_sheet_apply">Apply</string>
     <string name="wallpaper_apply_failed">Couldn\'t set wallpaper</string>
+
+    <string name="theme_packs_toolbar_title">Home Screen Style</string>
+    <string name="theme_packs_header">Theme Packs</string>
+    <string name="theme_packs_description">Explore beautiful theme packs and personalize your home screen with stunning wallpapers, icons, and styles.</string>
+    <string name="theme_packs_apply">Apply Now</string>
+    <string name="theme_pack_default">Default</string>
 </resources>
