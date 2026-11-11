@@ -9,12 +9,7 @@ import androidx.core.view.updatePadding
 import com.example.launcherapp.databinding.ActivityControlCenterBinding
 import com.example.launcherapp.utils.SessionManager
 
-/**
- * Settings-style Control Center screen (Figma: "Swipe down to Open Control Center"). Reached
- * from the Today View widgets page's Control Center tile. Resize/Custom Controls/Night Shift/
- * Setup The Record are placeholder rows for now, same as the unimplemented rows already on the
- * main Settings screen - only the two toggles actually persist anything.
- */
+
 class ControlCenterActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityControlCenterBinding
@@ -37,7 +32,7 @@ class ControlCenterActivity : AppCompatActivity() {
         }
     }
 
-    /** Pushes the scrollable content below the status bar / above the nav bar - enableEdgeToEdge() draws under both by design, so something has to consume the insets. */
+
     private fun applySystemBarInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())

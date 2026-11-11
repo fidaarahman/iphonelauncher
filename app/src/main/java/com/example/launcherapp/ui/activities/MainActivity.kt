@@ -18,7 +18,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    /** Set right before launching the role request, so the callback knows if we were default before. */
     private var wasDefaultHome = false
 
     private val requestHomeRole = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {

@@ -1109,7 +1109,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                     marginStart = (4.5f * density).toInt()
                     marginEnd = (4.5f * density).toInt()
                 }
-                setBackgroundResource(R.drawable.dot_shape)
+                setBackgroundResource(R.drawable.dot_shape_light)
             }
         }
         pageDots.forEach(indicator::addView)

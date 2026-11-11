@@ -39,14 +39,7 @@ import com.example.launcherapp.ui.icons.IosIconProvider
 import com.example.launcherapp.utils.AppLaunchTracker
 import kotlin.concurrent.thread
 
-/**
- * Spotlight-style search. Opened by tapping the home screen's "Search" pill - the swipe-down
- * gesture iOS uses is a deliberate follow-up, not built yet (see conversation).
- *
- * Background is the real wallpaper + a dark tint, not a live blur: RenderEffect blur needs
- * Android 12+, and this app's minSdk is 24, so a live blur would look inconsistent across
- * devices - the tint approximation works everywhere.
- */
+
 class SearchActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySearchBinding
