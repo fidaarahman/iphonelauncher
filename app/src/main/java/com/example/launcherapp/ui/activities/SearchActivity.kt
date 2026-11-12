@@ -36,6 +36,7 @@ import com.example.launcherapp.databinding.ActivitySearchBinding
 import com.example.launcherapp.ui.icons.DuotoneIconFilter
 import com.example.launcherapp.ui.icons.IconShaper
 import com.example.launcherapp.ui.icons.IosIconProvider
+import com.example.launcherapp.ui.model.TextSizeSettings
 import com.example.launcherapp.ui.model.ThemePack
 import com.example.launcherapp.ui.model.ThemePacks
 import com.example.launcherapp.utils.AppLaunchTracker
@@ -250,7 +251,10 @@ class SearchActivity : AppCompatActivity() {
         suggested.forEach { app ->
             val cell = layoutInflater.inflate(R.layout.item_home_app, binding.suggestedGrid, false)
             cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(app.icon)
-            cell.findViewById<TextView>(R.id.appLabel).text = app.label
+            cell.findViewById<TextView>(R.id.appLabel).apply {
+                text = app.label
+                textSize = HOME_LABEL_BASE_SP * TextSizeSettings.scale
+            }
             cell.layoutParams = GridLayout.LayoutParams().apply { width = cellWidth; height = ViewGroup.LayoutParams.WRAP_CONTENT }
             cell.setOnClickListener { launchApp(app) }
             binding.suggestedGrid.addView(cell)
@@ -381,5 +385,7 @@ class SearchActivity : AppCompatActivity() {
         const val SUGGESTION_COUNT = 8
         const val SUGGESTION_CELL_DP = 76
         const val CONTACT_RESULT_LIMIT = 10
+        // Must match HomeIconLabel's textSize (item_home_app.xml is reused here).
+        const val HOME_LABEL_BASE_SP = 11f
     }
 }

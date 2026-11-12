@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity() {
             requestDefaultHome()
         }
         binding.rowDefaultHomeScreen.setOnClickListener { requestDefaultHome() }
+        binding.rowGeneral.setOnClickListener { startActivity(Intent(this, GeneralActivity::class.java)) }
         binding.rowWallpaper.setOnClickListener { startActivity(Intent(this, WallpaperPickerActivity::class.java)) }
         binding.rowThemePacks.setOnClickListener { startActivity(Intent(this, ThemePacksActivity::class.java)) }
     }

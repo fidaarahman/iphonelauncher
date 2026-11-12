@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityWallpaperPreviewBinding
@@ -82,11 +83,15 @@ class WallpaperPreviewActivity : AppCompatActivity() {
         }
 
         sheetBinding.sheetApply.setOnClickListener {
-            sheetBinding.sheetApply.isEnabled = false
+            dialog.setCancelable(false)
+            sheetBinding.sheetContent.isVisible = false
+            sheetBinding.applyingOverlay.isVisible = true
             applyWallpaper(selected) { success ->
                 if (!success) {
                     Toast.makeText(this, R.string.wallpaper_apply_failed, Toast.LENGTH_SHORT).show()
-                    sheetBinding.sheetApply.isEnabled = true
+                    dialog.setCancelable(true)
+                    sheetBinding.applyingOverlay.isVisible = false
+                    sheetBinding.sheetContent.isVisible = true
                     return@applyWallpaper
                 }
                 dialog.dismiss()

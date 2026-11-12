@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generic stand-in for "whatever app icon" in the Flexible Text Size preview - swap for a real asset when one is provided. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp"
+    android:height="56dp"
+    android:viewportWidth="56"
+    android:viewportHeight="56">
+    <path
+        android:pathData="M11,0L45,0A11,11 0,0 1,56 11L56,45A11,11 0,0 1,45 56L11,56A11,11 0,0 1,0 45L0,11A11,11 0,0 1,11 0z"
+        android:fillColor="#C7C7CC" />
+    <path
+        android:fillColor="#ffffff"
+        android:pathData="M28,16A12,12 0,1 0,28 40A12,12 0,1 0,28 16z" />
+</vector>

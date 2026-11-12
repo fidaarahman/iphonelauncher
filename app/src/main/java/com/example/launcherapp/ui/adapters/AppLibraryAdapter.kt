@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.launcherapp.LauncherAppEntry
 import com.example.launcherapp.R
 import com.example.launcherapp.ui.model.AppLibraryGroup
+import com.example.launcherapp.ui.model.TextSizeSettings
 
 
 class AppLibraryAdapter(
@@ -41,6 +42,7 @@ class AppLibraryAdapter(
         val group = groups[position]
         val apps = group.apps
         holder.label.text = group.title
+        holder.label.textSize = GROUP_LABEL_BASE_SP * TextSizeSettings.scale
         holder.slots.forEach { it.removeAllViews() }
 
         val largeCount = if (apps.size <= SLOTS) apps.size else SLOTS - 1
@@ -106,5 +108,7 @@ class AppLibraryAdapter(
         const val SLOTS = 4
         const val MINI_COUNT = 4
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
+        // Must match item_app_library_tile.xml's groupLabel textSize.
+        const val GROUP_LABEL_BASE_SP = 12f
     }
 }

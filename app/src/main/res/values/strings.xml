@@ -56,6 +56,7 @@
     <string name="wallpaper_sheet_home_screen">Set as home screen</string>
     <string name="wallpaper_sheet_both">Set on both</string>
     <string name="wallpaper_sheet_apply">Apply</string>
+    <string name="wallpaper_sheet_applying">Applying wallpaper…</string>
     <string name="wallpaper_apply_failed">Couldn\'t set wallpaper</string>
 
     <string name="theme_packs_toolbar_title">Home Screen Style</string>
@@ -63,4 +64,20 @@
     <string name="theme_packs_description">Explore beautiful theme packs and personalize your home screen with stunning wallpapers, icons, and styles.</string>
     <string name="theme_packs_apply">Apply Now</string>
     <string name="theme_pack_default">Default</string>
+
+    <string name="general_toolbar_title">General</string>
+    <string name="general_section_options">Options</string>
+    <string name="general_row_blur_effect">Blur Effect</string>
+    <string name="general_row_page_transition">Page Transition</string>
+    <string name="general_section_change_app_size">Change App Size</string>
+    <string name="general_row_flexible_text_size">Flexible Text Size</string>
+    <string name="general_text_size_value">108%</string>
+    <string name="general_text_size_percent">%d%%</string>
+    <string name="general_text_size_dot">•</string>
+    <string name="general_text_size_default">Default</string>
+
+    <string name="page_transition_toolbar_title">Page Transition</string>
+    <string name="page_transition_option_default">Default</string>
+    <string name="page_transition_option_zoom_in">Zoom in</string>
+    <string name="page_transition_option_alpha">Alpha</string>
 </resources>

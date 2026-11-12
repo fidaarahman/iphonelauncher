@@ -66,6 +66,9 @@ import com.example.launcherapp.ui.model.AppLibraryGroup
 import com.example.launcherapp.ui.model.HomeGrid
 import com.example.launcherapp.Repositories.HomeLayoutRepository
 import com.example.launcherapp.ui.model.HomeModel
+import com.example.launcherapp.ui.model.PageTransition
+import com.example.launcherapp.ui.model.PageTransitions
+import com.example.launcherapp.ui.model.TextSizeSettings
 import com.example.launcherapp.Repositories.FirstScreenPolicy
 import com.example.launcherapp.Repositories.defaultHandlerPackage
 import com.example.launcherapp.ui.icons.DuotoneIconFilter
@@ -241,6 +244,25 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         // Picks up a wallpaper change made via the Wallpapers tile, or a theme pack applied from
         // the Theme Packs screen - neither reports back with a callback we can otherwise listen for.
         applyThemeOrDeviceWallpaper()
+        applyPageTransition()
+        applyTextSizeScale()
+    }
+
+    /** Picks up a Flexible Text Size change made on the General screen - same "no callback" reasoning as above. */
+    private fun applyTextSizeScale() {
+        val scale = TextSizeSettings.scale
+        pageViews.values.forEach { viewsByKey ->
+            viewsByKey.values.forEach { cellView ->
+                cellView.findViewById<TextView>(R.id.appLabel)?.textSize = HOME_LABEL_BASE_SP * scale
+            }
+        }
+        refreshLibraryIfAttached() // AppLibraryAdapter reads TextSizeSettings.scale itself when it rebinds
+    }
+
+    /** Picks up a page transition chosen on the Page Transition screen - same "no callback" reasoning as above. */
+    private fun applyPageTransition() {
+        val transition = PageTransition.find(SessionManager.getString(PageTransition.PREF_KEY, ""))
+        binding.homePager.setPageTransformer(PageTransitions.transformerFor(transition))
     }
 
     /**
@@ -879,7 +901,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         val cell = layoutInflater.inflate(R.layout.item_home_app, parent, false)
         val icon = cell.findViewById<ImageView>(R.id.appIcon)
         icon.setImageDrawable(iconDrawableFor(app))
-        cell.findViewById<TextView>(R.id.appLabel).text = app.label
+        cell.findViewById<TextView>(R.id.appLabel).apply {
+            text = app.label
+            textSize = HOME_LABEL_BASE_SP * TextSizeSettings.scale
+        }
         cell.contentDescription = app.label
         attachIconInteractions(touchTarget = cell, iconView = icon, key = app.key, withMenu = true)
         return cell
@@ -1360,7 +1385,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         googleFolderMembers.forEach { app ->
             val cell = layoutInflater.inflate(R.layout.item_folder_app, binding.folderGrid, false)
             cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(iconDrawableFor(app))
-            cell.findViewById<TextView>(R.id.appLabel).text = app.label
+            cell.findViewById<TextView>(R.id.appLabel).apply {
+                text = app.label
+                textSize = FOLDER_LABEL_BASE_SP * TextSizeSettings.scale
+            }
             cell.setOnClickListener {
                 closeFolder()
                 launchApp(app)
@@ -1381,7 +1409,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         group.apps.forEach { app ->
             val cell = layoutInflater.inflate(R.layout.item_folder_app, binding.folderGrid, false)
             cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(iconDrawableFor(app))
-            cell.findViewById<TextView>(R.id.appLabel).text = app.label
+            cell.findViewById<TextView>(R.id.appLabel).apply {
+                text = app.label
+                textSize = FOLDER_LABEL_BASE_SP * TextSizeSettings.scale
+            }
             cell.setOnClickListener {
                 closeFolder()
                 launchApp(app)
@@ -1428,6 +1459,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         // Whether this app is the one that last overwrote the real system wallpaper with a theme
         // gradient - so clearing it back to the OS default only happens when WE put it there.
         private const val KEY_THEME_SET_SYSTEM_WALLPAPER = "theme_set_system_wallpaper"
+        // Base sizes Flexible Text Size scales from - must match HomeIconLabel / item_folder_app.xml.
+        private const val HOME_LABEL_BASE_SP = 11f
+        private const val FOLDER_LABEL_BASE_SP = 11f
     }
 }
 

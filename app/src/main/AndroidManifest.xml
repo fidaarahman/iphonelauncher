@@ -59,6 +59,12 @@
             android:name=".ui.activities.ThemePacksActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.activities.GeneralActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.activities.PageTransitionActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.activities.LauncherHomeActivity"
             android:exported="true"
             android:launchMode="singleTask"
