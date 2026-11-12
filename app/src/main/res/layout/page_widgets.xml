@@ -16,41 +16,37 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Search bar: icon + text centred together (same as the App Library page). -->
-        <FrameLayout
-            android:id="@+id/widgetsSearchBar"
+        <!-- Suggested apps for this space - most-used, falling back to sensible defaults (phone,
+             messages, browser, etc.) on a fresh install so it's never empty. Same source as the App
+             Library's own "Suggestions" tile and the same card style as SearchActivity's own
+             Suggestions grid. Cells are added in code (LauncherHomeActivity.bindWidgetsSuggestions). -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/search_suggestions_header"
+            android:textColor="@android:color/white"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <android.widget.GridLayout
+            android:id="@+id/widgetsSuggestionsGrid"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:background="@drawable/home_search_pill_background"
-            android:clickable="true"
-            android:focusable="true">
+            android:background="@drawable/bg_search_card"
+            android:columnCount="4"
+            android:padding="8dp" />
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <ImageView
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_home_search" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/app_library_title"
-                    android:textColor="@android:color/white"
-                    android:textSize="15sp" />
-
-            </LinearLayout>
-
-        </FrameLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/app_library_title"
+            android:textColor="@android:color/white"
+            android:textSize="15sp" />
 
         <!-- ===================== Row 1: Clock | Sunset ===================== -->
         <LinearLayout

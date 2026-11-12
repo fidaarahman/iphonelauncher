@@ -38,6 +38,7 @@ import android.view.ViewConfiguration
 import android.view.ViewOutlineProvider
 import android.view.ViewTreeObserver
 import android.view.animation.LinearInterpolator
+import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -340,6 +341,14 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             }
         }
         refreshLibraryIfAttached() // AppLibraryAdapter reads TextSizeSettings.scale itself when it rebinds
+        refreshWidgetsSuggestionsIfAttached()
+    }
+
+    /** Re-binds just the suggestions grid - same "widgets page may already be attached" reasoning as refreshWidgetsPageIfAttached(). */
+    private fun refreshWidgetsSuggestionsIfAttached() {
+        val recycler = binding.homePager.getChildAt(0) as? RecyclerView ?: return
+        val holder = recycler.findViewHolderForAdapterPosition(widgetsPosition()) as? HomePagerAdapter.WidgetsViewHolder ?: return
+        bindWidgetsSuggestions(holder.root)
     }
 
     /** Picks up a page transition chosen on the Page Transition screen - same "no callback" reasoning as above. */
@@ -1017,6 +1026,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         bindWeatherTile(root)
         bindBatteryTile(root)
         bindPhotoTile(root)
+        bindWidgetsSuggestions(root)
         root.findViewById<View>(R.id.wallpapersTile).setOnClickListener { openWallpaperPicker() }
         root.findViewById<View>(R.id.controlCenterTile).setOnClickListener {
             startActivity(Intent(this, ControlCenterActivity::class.java))
@@ -1030,6 +1040,32 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         val holder = recycler.findViewHolderForAdapterPosition(widgetsPosition()) as? HomePagerAdapter.WidgetsViewHolder ?: return
         bindWeatherTile(holder.root)
         bindPhotoTile(holder.root)
+    }
+
+    /**
+     * Fills the space where a stray "App Library" search bar used to sit with an 8-app Suggestions
+     * grid instead - same card style as SearchActivity's own Suggestions grid, same data source as
+     * the App Library's own "Suggestions" tile, so it's never empty: most-used apps once there's
+     * usage data, sensible defaults (phone, messages, browser...) on a fresh install.
+     */
+    private fun bindWidgetsSuggestions(root: ViewGroup) {
+        val suggested = appLibraryGroups.firstOrNull { it.title == "Suggestions" }?.apps.orEmpty()
+            .take(WIDGETS_SUGGESTIONS_COUNT)
+        val grid = root.findViewById<GridLayout>(R.id.widgetsSuggestionsGrid)
+        grid.removeAllViews()
+        val cellWidth = dp(WIDGETS_SUGGESTION_CELL_DP)
+        suggested.forEach { app ->
+            val cell = layoutInflater.inflate(R.layout.item_home_app, grid, false)
+            cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(iconDrawableFor(app))
+            cell.findViewById<TextView>(R.id.appLabel).apply {
+                text = app.label
+                textSize = HOME_LABEL_BASE_SP * TextSizeSettings.scale
+            }
+            cell.layoutParams = GridLayout.LayoutParams().apply { width = cellWidth; height = ViewGroup.LayoutParams.WRAP_CONTENT }
+            cell.contentDescription = app.label
+            cell.setOnClickListener { launchApp(app) }
+            grid.addView(cell)
+        }
     }
 
     private fun requestWidgetPermissionsIfNeeded() {
@@ -1567,6 +1603,10 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         private const val BLUR_OVERLAY_COLOR = 0x33FFFFFF
         // Must match folder_panel_background's / bg_blur_mask_folder's corner radius.
         private const val FOLDER_PANEL_RADIUS_DP = 28
+        // Suggested-apps grid on the Today View widgets page - same cell width as SearchActivity's
+        // own Suggestions grid (SUGGESTION_CELL_DP), 4 columns x 2 rows.
+        private const val WIDGETS_SUGGESTIONS_COUNT = 8
+        private const val WIDGETS_SUGGESTION_CELL_DP = 76
     }
 }
 
