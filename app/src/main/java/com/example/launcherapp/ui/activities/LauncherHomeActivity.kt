@@ -192,11 +192,6 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     /** Whether the previously selected page had its chrome hidden (App Library / widgets page). */
     private var wasOnHiddenChromePage = false
 
-    /**
-     * Which view currently represents each app key, per page. This is the single source of
-     * truth for reuse/cleanup in [renderPage] - we never rebuild it by scanning the ViewGroup's
-     * children, so it can't drift from what's actually attached (the cause of ghost icons).
-     */
     private val pageViews = WeakHashMap<HomeCellLayout, LinkedHashMap<String, View>>()
     private fun viewsFor(cells: HomeCellLayout) = pageViews.getOrPut(cells) { LinkedHashMap() }
 
@@ -357,12 +352,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.homePager.setPageTransformer(PageTransitions.transformerFor(transition))
     }
 
-    /**
-     * Applies the selected theme pack (if any):
-     * - icons, App Library, folder and clock in the theme colour (icons recoloured in the background);
-     * - dock stays light glass (a solid tint made it a coloured box);
-     * - background, see [updateBackground].
-     */
+
     private fun applyThemeOrDeviceWallpaper() {
         val theme = ThemePacks.find(SessionManager.getString(ThemePacks.PREF_KEY, "").ifEmpty { null })
         if (theme?.id != activeTheme?.id) {
