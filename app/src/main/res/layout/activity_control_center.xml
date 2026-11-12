@@ -76,8 +76,12 @@
 
             <!-- Resize -->
             <LinearLayout
+                android:id="@+id/rowResize"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -189,8 +193,12 @@
 
             <!-- Night Shift -->
             <LinearLayout
+                android:id="@+id/rowNightShift"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"

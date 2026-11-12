@@ -8,6 +8,9 @@ import android.os.Looper
 import android.view.View
 import android.view.animation.LinearInterpolator
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivitySplashBinding
 
 class SplashActivity : AppCompatActivity() {
@@ -18,6 +21,7 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemBarColors()
 
         rotateDots()
 
@@ -25,6 +29,18 @@ class SplashActivity : AppCompatActivity() {
             startActivity(Intent(this, MainActivity::class.java))
             finish()
         }, SPLASH_DURATION_MS)
+    }
+
+    /** Without this the status/nav bars show the theme's default (purple) colorPrimary instead of
+     *  matching splashRoot's own light background - a visible seam at the very top/bottom. */
+    private fun applySystemBarColors() {
+        val background = ContextCompat.getColor(this, R.color.splash_background)
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        WindowCompat.getInsetsController(window, binding.root).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
     }
 
     private fun rotateDots() {

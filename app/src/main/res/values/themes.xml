@@ -3,9 +3,16 @@
     <style name="Base.Theme.LauncherApp" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="switchStyle">@style/Widget.LauncherApp.Switch</item>
     </style>
 
     <style name="Theme.LauncherApp" parent="Base.Theme.LauncherApp" />
+
+    <!-- Every MaterialSwitch in the app uses this via switchStyle above - ON = #18A107 (Figma), OFF = light gray. -->
+    <style name="Widget.LauncherApp.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="trackTint">@color/switch_track_color</item>
+        <item name="thumbTint">@color/switch_thumb_color</item>
+    </style>
 
     <style name="Theme.LauncherApp.Home" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowShowWallpaper">true</item>

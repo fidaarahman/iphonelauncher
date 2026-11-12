@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet_rounded_top"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="@string/control_center_row_resize"
+        android:textColor="@color/splash_title"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/resize_width_label"
+        android:textColor="@color/splash_subtitle"
+        android:textSize="13sp" />
+
+    <SeekBar
+        android:id="@+id/resizeWidthSeekBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="16dp"
+        android:max="100"
+        android:maxHeight="6dp"
+        android:minHeight="6dp"
+        android:progressDrawable="@drawable/progress_seekbar_green"
+        android:splitTrack="false"
+        android:thumb="@drawable/thumb_seekbar_green" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/resize_height_label"
+        android:textColor="@color/splash_subtitle"
+        android:textSize="13sp" />
+
+    <SeekBar
+        android:id="@+id/resizeHeightSeekBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="16dp"
+        android:max="100"
+        android:maxHeight="6dp"
+        android:minHeight="6dp"
+        android:progressDrawable="@drawable/progress_seekbar_green"
+        android:splitTrack="false"
+        android:thumb="@drawable/thumb_seekbar_green" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/resize_alpha_label"
+        android:textColor="@color/splash_subtitle"
+        android:textSize="13sp" />
+
+    <SeekBar
+        android:id="@+id/resizeAlphaSeekBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="20dp"
+        android:max="100"
+        android:maxHeight="6dp"
+        android:minHeight="6dp"
+        android:progressDrawable="@drawable/progress_seekbar_green"
+        android:splitTrack="false"
+        android:thumb="@drawable/thumb_seekbar_green" />
+
+    <TextView
+        android:id="@+id/resizeApply"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@drawable/bg_button_green"
+        android:gravity="center"
+        android:text="@string/action_apply"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

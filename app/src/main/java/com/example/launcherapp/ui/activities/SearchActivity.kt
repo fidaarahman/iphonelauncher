@@ -75,6 +75,10 @@ class SearchActivity : AppCompatActivity() {
         // Let Android draw the user's real wallpaper behind this screen (same as the home screen).
         window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        // Without this the status bar falls back to the theme's default (opaque) colorPrimary,
+        // breaking the wallpaper's edge-to-edge look right at the very top of the screen.
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
         binding = ActivitySearchBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applySystemBarInsets()

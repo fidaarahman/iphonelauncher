@@ -19,6 +19,34 @@
     <string name="control_center_row_night_shift">Night Shift</string>
     <string name="control_center_row_setup_record">Setup The Record</string>
 
+    <string name="control_center_permission_title">Permission Requires</string>
+    <string name="control_center_permission_description">Allow Launcher OS permissions to enhance your privacy and security</string>
+    <string name="control_center_row_listen_notification">Listen Notification</string>
+    <string name="control_center_row_accessibility">Accessibility</string>
+    <string name="control_center_accessibility_dialog_title">Turn on Accessibility Mode</string>
+    <string name="control_center_accessibility_dialog_description">Enable Accessibility to use Control Center over apps and your home screen. Your personal information stays private.</string>
+    <string name="control_center_accessibility_service_description">Lets Control Center recognise the swipe-down gesture and show its panel over other apps.</string>
+
+    <string name="action_cancel">Cancel</string>
+    <string name="action_allow">Allow</string>
+    <string name="action_apply">Apply</string>
+
+    <string name="resize_width_label">Width</string>
+    <string name="resize_height_label">Height</string>
+    <string name="resize_alpha_label">Alpha</string>
+
+    <string name="night_shift_from_label">From</string>
+    <string name="night_shift_to_label">To</string>
+    <string name="night_shift_manually_enable_label">Manually Enable</string>
+    <string name="night_shift_color_temperature_label">Color Temperature</string>
+    <string name="night_shift_cool_label">Cool</string>
+    <string name="night_shift_warm_label">Warm</string>
+
+    <string name="control_center_tile_flashlight">Flashlight</string>
+    <string name="control_center_tile_wifi">WiFi</string>
+    <string name="control_center_tile_bluetooth">Bluetooth</string>
+    <string name="control_center_tile_airplane">Airplane</string>
+
     <string name="search_hint">Search</string>
     <string name="search_cancel">Cancel</string>
     <string name="search_suggestions_header">Suggestions</string>

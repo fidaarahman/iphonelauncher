@@ -16,6 +16,7 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -51,6 +52,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
+import androidx.core.view.doOnPreDraw
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
@@ -131,6 +134,11 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     // so a slow wallpaper load can never overwrite a newer one.
     private var appliedBackground: String? = null
     private var backgroundRequest = 0
+
+    // Blur Effect for the dock + search pill: latest request (a slow one never overwrites a newer
+    // one), and the phone's wallpaper read for it in the background (reused by the folder blur).
+    private var chromeBlurRequest = 0
+    @Volatile private var cachedDeviceWallpaper: Drawable? = null
 
     /** Real apps currently bundled inside the "Google" folder icon - populated each load. */
     private var googleFolderMembers: List<LauncherAppEntry> = emptyList()
@@ -252,79 +260,112 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         applyBlurEffect()
     }
 
-    /** One-time setup for the dock/search pill/folder-panel BlurViews - which algorithm they use never changes, only whether they're shown. */
-    /** One-time setup for the dock/search pill BlurViews - which algorithm they use never changes, only whether they're shown. */
+    /** The folder panel only needs its rounded clip - all blur is now made by SnapshotBlur. */
     private fun setupBlurViews() {
-        val algorithm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            RenderEffectBlur()
-        } else {
-            RenderScriptBlur(this)
-        }
-        val windowBackground = window.decorView.background
-        listOf(binding.dockBlurView, binding.searchPillBlurView).forEach { blurView ->
-            blurView.setupWith(binding.root, algorithm)
-                .setFrameClearDrawable(windowBackground)
-                .setBlurRadius(BLUR_RADIUS)
-            blurView.setOverlayColor(BLUR_OVERLAY_COLOR)
-            blurView.outlineProvider = ViewOutlineProvider.BACKGROUND
-            blurView.clipToOutline = true
-        }
-        // The folder panel gets its blur from a snapshot when it opens (updateFolderScrimHole);
-        // it only needs its rounded clip here.
         binding.folderPanel.outlineProvider = ViewOutlineProvider.BACKGROUND
         binding.folderPanel.clipToOutline = true
     }
 
     /** Picks up a Blur Effect change made on the General screen - same "no callback" reasoning as above. */
-    /** Picks up a Blur Effect change made on the General screen - same "no callback" reasoning as above. */
     private fun applyBlurEffect() {
-        val enabled = BlurEffectSettings.enabled
-
-        binding.dockBlurView.isVisible = enabled
-        binding.dockBlurView.alpha = binding.dock.alpha // matches whatever fadeTo() last left the dock at
-        binding.dockBlurView.setBlurAutoUpdate(enabled)
-        binding.dock.background = if (enabled) null else ContextCompat.getDrawable(this, R.drawable.home_dock_background)
-
-        binding.searchPillBlurView.isVisible = enabled
-        binding.searchPillBlurView.alpha = binding.searchPill.alpha // same reasoning
-        binding.searchPillBlurView.setBlurAutoUpdate(enabled)
-        binding.searchPill.background = if (enabled) null else ContextCompat.getDrawable(this, R.drawable.home_glass_pill_background)
-
-        // Folder: no live BlurView any more - the blurred background is made when the folder
-        // opens (updateFolderScrimHole). Until then it has the normal glass background.
+        // The live BlurViews are not used any more (they drew a broken, wrongly scaled blur on
+        // newer Android). The dock / pill / folder blur is made by SnapshotBlur instead.
+        binding.dockBlurView.isVisible = false
+        binding.searchPillBlurView.isVisible = false
         binding.folderBlurView.isVisible = false
-        binding.folderPanel.background = ContextCompat.getDrawable(this, R.drawable.folder_panel_background)
+        refreshChromeBlur()
+    }
+
+    /**
+     * Blur Effect for the dock + search pill. Only the wallpaper is ever behind them (home pages
+     * stop above the pill), so a blurred copy of the wallpaper's part under each one is exactly
+     * what a live blur would show - made once, off the main thread, whenever the wallpaper or the
+     * setting changes. Blur off, or nothing readable behind: the normal glass backgrounds.
+     */
+    private fun refreshChromeBlur() {
+        val request = ++chromeBlurRequest
+        val dockGlass = ContextCompat.getDrawable(this, R.drawable.home_dock_background)
+        val pillGlass = ContextCompat.getDrawable(this, R.drawable.home_glass_pill_background)
+        if (!BlurEffectSettings.enabled) {
+            binding.dock.background = dockGlass
+            binding.searchPill.background = pillGlass
+            return
+        }
+        binding.root.doOnLayout {
+            if (request != chromeBlurRequest) return@doOnLayout
+            val root = binding.root
+            val dockRect: Rect = SnapshotBlur.rectInRoot(root, binding.dock)
+            val pillRect: Rect = SnapshotBlur.rectInRoot(root, binding.searchPill)
+            val dockRadius = (dockGlass as? GradientDrawable)?.cornerRadius?.takeIf { it > 0f } ?: dp(30).toFloat()
+            val pillRadius = pillRect.height() / 2f
+            // A COPY of what the wallpaper ImageView shows (never the drawable on screen itself).
+            val shownWallpaper = if (binding.wallpaper.isVisible) {
+                binding.wallpaper.drawable?.constantState?.newDrawable(resources)?.mutate()
+            } else {
+                null
+            }
+            val usesDeviceWallpaper = !binding.wallpaper.isVisible
+            val width = root.width
+            val height = root.height
+            thread(name = "chrome-blur") {
+                val source = shownWallpaper ?: if (usesDeviceWallpaper) {
+                    // The phone's own wallpaper - Android may not allow reading it (then: plain glass).
+                    runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull()
+                        .also { cachedDeviceWallpaper = it }
+                } else {
+                    null
+                }
+                val backgrounds = source?.let {
+                    SnapshotBlur.regionBackgrounds(
+                        resources, it, width, height,
+                        regions = listOf(dockRect, pillRect),
+                        cornerRadiiPx = listOf(dockRadius, pillRadius),
+                        overlayColor = BLUR_OVERLAY_COLOR
+                    )
+                }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed || request != chromeBlurRequest) return@runOnUiThread
+                    binding.dock.background = backgrounds?.getOrNull(0) ?: dockGlass
+                    binding.searchPill.background = backgrounds?.getOrNull(1) ?: pillGlass
+                }
+            }
+        }
     }
 
     /**
      * Folder / App Library group panel background. Blur Effect off: the normal glass panel.
-     * Blur Effect on: a blurred SNAPSHOT of the home screen behind the panel (wallpaper + pages +
-     * dock, never the folder itself), made once after the panel is laid out. The scrim is a plain
-     * dark scrim - no hole is cut any more.
+     * Blur Effect on: the folder stays invisible until the blurred snapshot of the home screen is
+     * ready, then fades in - so the plain (white) panel never shows first.
      */
     private fun updateFolderScrimHole() {
-        binding.folderOverlay.setHole(null, 0f)
+        val overlay = binding.folderOverlay
+        overlay.setHole(null, 0f)
+        overlay.animate().cancel()
         binding.folderPanel.background = ContextCompat.getDrawable(this, R.drawable.folder_panel_background)
-        if (!BlurEffectSettings.enabled) return
-        binding.folderPanel.post {
-            if (!binding.folderOverlay.isVisible) return@post
-            // Using the phone's own wallpaper (no wallpaper ImageView shown): try to read it to blur;
-            // if Android doesn't allow it, the blur is drawn over dark glass instead.
+        if (!BlurEffectSettings.enabled) {
+            overlay.alpha = 1f
+            return
+        }
+        overlay.alpha = 0f
+        // Runs after the panel is laid out, just before it would be drawn.
+        binding.folderPanel.doOnPreDraw {
+            if (!overlay.isVisible) return@doOnPreDraw
             val deviceWallpaper = if (binding.wallpaper.isVisible) {
                 null
             } else {
-                runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull()
+                cachedDeviceWallpaper?.constantState?.newDrawable(resources)?.mutate()
             }
             SnapshotBlur.panelBackground(
                 resources = resources,
                 root = binding.root,
                 panel = binding.folderPanel,
                 layers = listOf(binding.wallpaper, binding.homeContent),
-                hideWhileCapturing = listOf(binding.dockBlurView, binding.searchPillBlurView),
+                hideWhileCapturing = emptyList(),
                 deviceWallpaper = deviceWallpaper,
                 cornerRadiusPx = dp(FOLDER_PANEL_RADIUS_DP).toFloat(),
                 overlayColor = BLUR_OVERLAY_COLOR
             )?.let { binding.folderPanel.background = it }
+            overlay.animate().alpha(1f).setDuration(120L).start()
         }
     }
     /** Picks up a Flexible Text Size change made on the General screen - same "no callback" reasoning as above. */
@@ -392,6 +433,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         if (theme != null && !hasWallpaper) {
             binding.wallpaper.setImageDrawable(themeGradient(theme))
             binding.wallpaper.isVisible = true
+            refreshChromeBlur()
             pushThemeGradientToSystemWallpaper(theme)
             return
         }
@@ -419,6 +461,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                     }
                     else -> applyDeviceWallpaper()
                 }
+                refreshChromeBlur()
             }
         }
     }
@@ -506,6 +549,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun applyDeviceWallpaper() {
         binding.wallpaper.setImageDrawable(null)
         binding.wallpaper.isVisible = false
+        refreshChromeBlur()
     }
     /** Re-binds every currently visible icon (home pages + dock + App Library) so a just-changed theme takes effect immediately, without reloading the app list. */
     private fun refreshThemedIcons() {
@@ -879,13 +923,13 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     }
 
     /**
-     * Fades a view in/out and makes it INVISIBLE (not tappable) once hidden. [linked] - the blur
-     * layer sitting behind [view] - mirrors the same fade, but only while Blur Effect is on;
-     * otherwise it's meant to stay GONE and must not be touched.
+     * Fades a view in/out and makes it INVISIBLE (not tappable) once hidden. [linked] is not used
+     * any more (the blur is now the view's own background, so it fades with it) - kept so the
+     * callers don't change.
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun fadeTo(view: View, visible: Boolean, linked: View? = null) {
         animateAlpha(view, visible)
-        if (linked != null && BlurEffectSettings.enabled) animateAlpha(linked, visible)
     }
 
     private fun animateAlpha(view: View, visible: Boolean) {

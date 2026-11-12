@@ -3,6 +3,7 @@ package com.example.launcherapp.utils
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -10,32 +11,31 @@ import android.view.View
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory
 
 /**
- * "Snapshot" blur for panels that sit over a screen that doesn't move while they're open
- * (the folder / App Library group panel):
+ * "Snapshot" blur - a blurred copy of what's behind a view, made once instead of live:
  *
- * 1. draws only the given [layers] (e.g. wallpaper + home content - NOT the folder itself) into a
- *    small bitmap (1/8 size, so it's fast);
- * 2. blurs it (3 box-blur passes = smooth, close to a gaussian blur);
- * 3. cuts out exactly the part under the panel and returns it as a rounded background with the
- *    same light glass tint as the dock.
+ * - [panelBackground]: for the folder / App Library group panel. Draws the given views
+ *   (wallpaper + home content, never the folder itself), blurs, cuts out the panel's area.
+ *   Main thread only (it draws views).
+ * - [regionBackgrounds]: for the dock and the search pill. Only the wallpaper is ever behind
+ *   them, so it blurs just the wallpaper drawable - safe to run on a background thread.
  *
- * Done once when the panel opens - no live capture, so the panel's own icons can never end up
- * blurred into its background, and nothing has to be cut out of the dark scrim.
+ * Every result is a rounded background: the blur + the same light glass tint as before.
  */
 object SnapshotBlur {
 
-    private const val SCALE = 0.125f        // capture at 1/8 size
+    private const val SCALE = 0.125f        // capture at 1/8 size (fast, and smoother blur)
     private const val BLUR_RADIUS_PX = 5    // in the small bitmap (~40px on screen)
     private const val BLUR_PASSES = 3
     private const val FALLBACK_COLOR = 0xFF1C1C1E.toInt() // when there's nothing to show behind
 
     /**
+     * Folder panel background (main thread).
      * @param root the full-screen view everything is measured against.
-     * @param panel the view that gets the blurred background (must already be laid out).
+     * @param panel the view that gets the background (must already be laid out).
      * @param layers views to capture, drawn in this order (hidden ones are skipped).
-     * @param hideWhileCapturing views inside [layers] to leave out (e.g. live BlurViews).
-     * @param deviceWallpaper the phone's wallpaper, drawn first when the launcher shows it (or null).
-     * @return the background drawable, or null if anything went wrong (keep the plain background then).
+     * @param hideWhileCapturing views inside [layers] to leave out.
+     * @param deviceWallpaper the phone's wallpaper, drawn first (or null).
+     * @return the background, or null if anything went wrong (keep the plain background then).
      */
     fun panelBackground(
         resources: Resources,
@@ -48,45 +48,78 @@ object SnapshotBlur {
         overlayColor: Int
     ): Drawable? = runCatching {
         if (root.width <= 0 || root.height <= 0 || panel.width <= 0 || panel.height <= 0) return null
-        val small = capture(root, layers, hideWhileCapturing, deviceWallpaper)
+        val small = newSmallBitmap(root.width, root.height)
+        val canvas = scaledCanvas(small, root.width, root.height)
+        deviceWallpaper?.let { drawCenterCrop(canvas, it, root.width, root.height) }
+        drawViews(canvas, root, layers, hideWhileCapturing)
         boxBlur(small, BLUR_RADIUS_PX, BLUR_PASSES)
-        val crop = cropUnder(small, root, panel)
-        val blurred = RoundedBitmapDrawableFactory.create(resources, crop).apply {
-            cornerRadius = cornerRadiusPx
-            setAntiAlias(true)
-        }
-        val glass = GradientDrawable().apply {
-            setColor(overlayColor)
-            cornerRadius = cornerRadiusPx
-        }
-        LayerDrawable(arrayOf(blurred, glass))
+        rounded(resources, crop(small, root.width, root.height, rectInRoot(root, panel)), cornerRadiusPx, overlayColor)
     }.getOrNull()
 
-    private fun capture(root: View, layers: List<View>, hide: List<View>, deviceWallpaper: Drawable?): Bitmap {
-        val w = (root.width * SCALE).toInt().coerceAtLeast(1)
-        val h = (root.height * SCALE).toInt().coerceAtLeast(1)
-        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.scale(w / root.width.toFloat(), h / root.height.toFloat())
-        canvas.drawColor(FALLBACK_COLOR)
-        deviceWallpaper?.let { drawCenterCrop(canvas, it, root.width, root.height) }
+    /**
+     * Dock / search pill backgrounds (any thread): blurs [wallpaper] as it's shown full-screen
+     * (centerCrop over [screenWidth] x [screenHeight]) and returns one background per region.
+     * Pass a COPY of the wallpaper drawable (constantState.newDrawable()), not the one on screen.
+     * @return one drawable per region (same order), or null if anything went wrong.
+     */
+    fun regionBackgrounds(
+        resources: Resources,
+        wallpaper: Drawable,
+        screenWidth: Int,
+        screenHeight: Int,
+        regions: List<Rect>,
+        cornerRadiiPx: List<Float>,
+        overlayColor: Int
+    ): List<Drawable>? = runCatching {
+        if (screenWidth <= 0 || screenHeight <= 0 || regions.isEmpty()) return null
+        val small = newSmallBitmap(screenWidth, screenHeight)
+        val canvas = scaledCanvas(small, screenWidth, screenHeight)
+        drawCenterCrop(canvas, wallpaper, screenWidth, screenHeight)
+        boxBlur(small, BLUR_RADIUS_PX, BLUR_PASSES)
+        regions.mapIndexed { index, region ->
+            rounded(resources, crop(small, screenWidth, screenHeight, region), cornerRadiiPx[index], overlayColor)
+        }
+    }.getOrNull()
 
+    /** [view]'s position and size inside [root]. */
+    fun rectInRoot(root: View, view: View): Rect {
+        val rootPos = IntArray(2).also { root.getLocationInWindow(it) }
+        val pos = IntArray(2).also { view.getLocationInWindow(it) }
+        val left = pos[0] - rootPos[0]
+        val top = pos[1] - rootPos[1]
+        return Rect(left, top, left + view.width, top + view.height)
+    }
+
+    // ---------------------------------------------------------------------------------------
+
+    private fun newSmallBitmap(width: Int, height: Int): Bitmap =
+        Bitmap.createBitmap(
+            (width * SCALE).toInt().coerceAtLeast(1),
+            (height * SCALE).toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888
+        )
+
+    /** Canvas on [small] that takes full-size coordinates, starting from the fallback colour. */
+    private fun scaledCanvas(small: Bitmap, fullWidth: Int, fullHeight: Int): Canvas =
+        Canvas(small).apply {
+            scale(small.width / fullWidth.toFloat(), small.height / fullHeight.toFloat())
+            drawColor(FALLBACK_COLOR)
+        }
+
+    private fun drawViews(canvas: Canvas, root: View, layers: List<View>, hide: List<View>) {
         val hidden = hide.filter { it.visibility == View.VISIBLE }
         hidden.forEach { it.visibility = View.INVISIBLE }
         try {
-            val rootPos = IntArray(2).also { root.getLocationInWindow(it) }
-            val pos = IntArray(2)
             layers.filter { it.visibility == View.VISIBLE && it.width > 0 && it.height > 0 }.forEach { layer ->
-                layer.getLocationInWindow(pos)
+                val rect = rectInRoot(root, layer)
                 canvas.save()
-                canvas.translate((pos[0] - rootPos[0]).toFloat(), (pos[1] - rootPos[1]).toFloat())
+                canvas.translate(rect.left.toFloat(), rect.top.toFloat())
                 layer.draw(canvas)
                 canvas.restore()
             }
         } finally {
             hidden.forEach { it.visibility = View.VISIBLE }
         }
-        return bitmap
     }
 
     /** Draws [drawable] like ImageView's centerCrop: fills [w] x [h], keeping its aspect ratio. */
@@ -106,17 +139,28 @@ object SnapshotBlur {
         drawable.draw(canvas)
     }
 
-    /** The part of the small bitmap that lies under [panel]. */
-    private fun cropUnder(small: Bitmap, root: View, panel: View): Bitmap {
-        val rootPos = IntArray(2).also { root.getLocationInWindow(it) }
-        val pos = IntArray(2).also { panel.getLocationInWindow(it) }
-        val sx = small.width / root.width.toFloat()
-        val sy = small.height / root.height.toFloat()
-        val left = ((pos[0] - rootPos[0]) * sx).toInt().coerceIn(0, small.width - 1)
-        val top = ((pos[1] - rootPos[1]) * sy).toInt().coerceIn(0, small.height - 1)
-        val width = (panel.width * sx).toInt().coerceIn(1, small.width - left)
-        val height = (panel.height * sy).toInt().coerceIn(1, small.height - top)
+    /** The part of the small bitmap under [region] (given in full-size coordinates). */
+    private fun crop(small: Bitmap, fullWidth: Int, fullHeight: Int, region: Rect): Bitmap {
+        val sx = small.width / fullWidth.toFloat()
+        val sy = small.height / fullHeight.toFloat()
+        val left = (region.left * sx).toInt().coerceIn(0, small.width - 1)
+        val top = (region.top * sy).toInt().coerceIn(0, small.height - 1)
+        val width = (region.width() * sx).toInt().coerceIn(1, small.width - left)
+        val height = (region.height() * sy).toInt().coerceIn(1, small.height - top)
         return Bitmap.createBitmap(small, left, top, width, height)
+    }
+
+    /** Blurred bitmap + glass tint, both with rounded corners. */
+    private fun rounded(resources: Resources, bitmap: Bitmap, cornerRadiusPx: Float, overlayColor: Int): Drawable {
+        val blurred = RoundedBitmapDrawableFactory.create(resources, bitmap).apply {
+            cornerRadius = cornerRadiusPx
+            setAntiAlias(true)
+        }
+        val glass = GradientDrawable().apply {
+            setColor(overlayColor)
+            cornerRadius = cornerRadiusPx
+        }
+        return LayerDrawable(arrayOf(blurred, glass))
     }
 
     /** In-place box blur; several passes look like a smooth gaussian blur. */
