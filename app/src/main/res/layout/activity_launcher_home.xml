@@ -212,11 +212,19 @@
                 android:minWidth="260dp"
                 android:padding="12dp">
 
-                <android.widget.GridLayout
-                    android:id="@+id/folderGrid"
+                <com.example.launcherapp.views.MaxHeightScrollView
+                    android:id="@+id/folderGridScroll"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:columnCount="3" />
+                    android:scrollbars="none">
+
+                    <android.widget.GridLayout
+                        android:id="@+id/folderGrid"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:columnCount="3" />
+
+                </com.example.launcherapp.views.MaxHeightScrollView>
 
             </FrameLayout>
 

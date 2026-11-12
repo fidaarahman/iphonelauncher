@@ -82,10 +82,7 @@ class ClockWidgetView @JvmOverloads constructor(
     /** Theme colour (tile of the themed clock), or null = original black clock. */
     private var themeColor: Int? = null
 
-    /**
-     * Theme pack colour, or `null` for the original black clock. With a colour: the tile is that
-     * colour and the ticks, numbers and hands are white.
-     */
+
     fun setThemeColor(color: Int?) {
         if (color == themeColor) return
         themeColor = color

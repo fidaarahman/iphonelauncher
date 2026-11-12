@@ -13,6 +13,8 @@ import android.net.Uri
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -208,6 +210,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         watchHomePageBottomSpace()
 
         binding.folderOverlay.setOnClickListener { closeFolder() }
+        binding.folderGridScroll.maxHeightPx = (resources.displayMetrics.heightPixels * 0.6f).toInt()
         contextMenu = AppContextMenu(binding.menuLayer, contextMenuActions)
         binding.doneButton.setOnClickListener { setEditMode(false) }
         binding.searchPill.setOnClickListener { startActivity(Intent(this, SearchActivity::class.java)) }
@@ -274,6 +277,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             appliedBackground = null
             backgroundRequest++
             applyDeviceWallpaper()
+            clearSystemWallpaperIfThemeSet()
             return
         }
         val signature = "${theme?.id}|${HomeWallpaperStore.signature()}"
@@ -284,6 +288,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         if (theme != null && !hasWallpaper) {
             binding.wallpaper.setImageDrawable(themeGradient(theme))
             binding.wallpaper.isVisible = true
+            pushThemeGradientToSystemWallpaper(theme)
             return
         }
         val metrics = resources.displayMetrics
@@ -324,6 +329,33 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun softenBackgroundColor(color: Int): Int {
         val strength = 0.3f
         return androidx.core.graphics.ColorUtils.blendARGB(color, 0xFFE5E5EA.toInt(), strength)
+    }
+
+    /**
+     * OS surfaces that bypass this app's own view - Recents/task switcher, lock screen - read the
+     * real system wallpaper directly, so a theme-only background (no wallpaper picked) needs to be
+     * pushed there too, not just drawn in [binding.wallpaper].
+     */
+    private fun pushThemeGradientToSystemWallpaper(theme: ThemePack) {
+        val width = resources.displayMetrics.widthPixels
+        val height = resources.displayMetrics.heightPixels
+        thread(name = "theme-system-wallpaper") {
+            runCatching {
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                themeGradient(theme).apply { setBounds(0, 0, width, height) }.draw(Canvas(bitmap))
+                WallpaperManager.getInstance(this).setBitmap(bitmap, null, true, WallpaperManager.FLAG_SYSTEM)
+                SessionManager.putBool(KEY_THEME_SET_SYSTEM_WALLPAPER, true)
+            }
+        }
+    }
+
+    /** Undoes [pushThemeGradientToSystemWallpaper] - only if we're the ones who last overwrote the system wallpaper, so a wallpaper the user picked some other way is never touched. */
+    private fun clearSystemWallpaperIfThemeSet() {
+        if (!SessionManager.getBool(KEY_THEME_SET_SYSTEM_WALLPAPER, false)) return
+        thread(name = "theme-system-wallpaper-clear") {
+            runCatching { WallpaperManager.getInstance(this).clear(WallpaperManager.FLAG_SYSTEM) }
+            SessionManager.putBool(KEY_THEME_SET_SYSTEM_WALLPAPER, false)
+        }
     }
 
     /**
@@ -857,7 +889,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun bindLibraryPage(root: ViewGroup) {
         val list = root.findViewById<RecyclerView>(R.id.libraryGroups)
         if (list.layoutManager == null) list.layoutManager = GridLayoutManager(this, 2)
-        list.adapter = AppLibraryAdapter(appLibraryGroups, iconFor = ::iconDrawableFor) { app -> launchApp(app) }
+        list.adapter = AppLibraryAdapter(appLibraryGroups, onOpenGroup = ::openLibraryGroup, iconFor = ::iconDrawableFor) { app -> launchApp(app) }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1342,6 +1374,23 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         binding.folderOverlay.isVisible = false
     }
 
+    /** Shows every app in an App Library category over the same dark scrim as the Google folder. */
+    private fun openLibraryGroup(group: AppLibraryGroup) {
+        binding.folderTitle.text = group.title
+        binding.folderGrid.removeAllViews()
+        group.apps.forEach { app ->
+            val cell = layoutInflater.inflate(R.layout.item_folder_app, binding.folderGrid, false)
+            cell.findViewById<ImageView>(R.id.appIcon).setImageDrawable(iconDrawableFor(app))
+            cell.findViewById<TextView>(R.id.appLabel).text = app.label
+            cell.setOnClickListener {
+                closeFolder()
+                launchApp(app)
+            }
+            binding.folderGrid.addView(cell)
+        }
+        binding.folderOverlay.isVisible = true
+    }
+
     /**
      * Opens the real installed Clock app - same one that answers ACTION_SHOW_ALARMS, but
      * launched via its own launcher entry (like tapping its icon) instead of firing that action
@@ -1376,6 +1425,9 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         // 12dp bottom margin) + PILL_GAP_DP, rounded up - a safe guess before the real layout
         // measurement is available.
         private const val DEFAULT_BOTTOM_SPACE_DP = 140
+        // Whether this app is the one that last overwrote the real system wallpaper with a theme
+        // gradient - so clearing it back to the OS default only happens when WE put it there.
+        private const val KEY_THEME_SET_SYSTEM_WALLPAPER = "theme_set_system_wallpaper"
     }
 }
 
