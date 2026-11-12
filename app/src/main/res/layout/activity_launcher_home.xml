@@ -40,6 +40,19 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Real backdrop blur behind the search pill - only shown while Blur Effect is on
+             (LauncherHomeActivity); same shape as home_glass_pill_background so it clips cleanly. -->
+        <eightbitlab.com.blurview.BlurView
+            android:id="@+id/searchPillBlurView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/bg_blur_mask_pill"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/searchPill"
+            app:layout_constraintEnd_toEndOf="@id/searchPill"
+            app:layout_constraintStart_toStartOf="@id/searchPill"
+            app:layout_constraintTop_toTopOf="@id/searchPill" />
+
         <!-- Small iOS "Search" pill -->
         <TextView
             android:id="@+id/searchPill"
@@ -80,6 +93,19 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="@id/searchPill" />
+
+        <!-- Real backdrop blur behind the dock - only shown while Blur Effect is on
+             (LauncherHomeActivity); same shape as home_dock_background so it clips cleanly. -->
+        <eightbitlab.com.blurview.BlurView
+            android:id="@+id/dockBlurView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/bg_blur_mask_dock"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/dock"
+            app:layout_constraintEnd_toEndOf="@id/dock"
+            app:layout_constraintStart_toStartOf="@id/dock"
+            app:layout_constraintTop_toTopOf="@id/dock" />
 
         <!-- Dock: 60dp icons + 16dp vertical padding = 92dp tall, like the Figma dock.
              minHeight keeps its size while an icon is dragged out of it. -->
@@ -174,11 +200,10 @@
         apps (iOS style). Hidden by default; LauncherHomeActivity shows/populates it on tap.
         Tapping the scrim (outside the panel) closes it without launching anything.
     -->
-    <FrameLayout
+    <com.example.launcherapp.views.HolePunchScrimView
         android:id="@+id/folderOverlay"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="#B3000000"
         android:clickable="true"
         android:focusable="true"
         android:visibility="gone"
@@ -203,7 +228,8 @@
                 android:textColor="@android:color/white"
                 android:textSize="20sp" />
 
-            <FrameLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/folderPanel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@drawable/folder_panel_background"
@@ -212,11 +238,29 @@
                 android:minWidth="260dp"
                 android:padding="12dp">
 
+                <!-- Real backdrop blur behind the panel - only shown while Blur Effect is on
+                     (LauncherHomeActivity). Constrained to folderGridScroll's own resolved bounds
+                     (not match_parent) so its size can never be mis-measured larger than the real
+                     content - folderPanel's clipToOutline rounds its corners. -->
+                <eightbitlab.com.blurview.BlurView
+                    android:id="@+id/folderBlurView"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone"
+                    app:layout_constraintBottom_toBottomOf="@id/folderGridScroll"
+                    app:layout_constraintEnd_toEndOf="@id/folderGridScroll"
+                    app:layout_constraintStart_toStartOf="@id/folderGridScroll"
+                    app:layout_constraintTop_toTopOf="@id/folderGridScroll" />
+
                 <com.example.launcherapp.views.MaxHeightScrollView
                     android:id="@+id/folderGridScroll"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:scrollbars="none">
+                    android:scrollbars="none"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent">
 
                     <android.widget.GridLayout
                         android:id="@+id/folderGrid"
@@ -226,10 +270,10 @@
 
                 </com.example.launcherapp.views.MaxHeightScrollView>
 
-            </FrameLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
         </LinearLayout>
 
-    </FrameLayout>
+    </com.example.launcherapp.views.HolePunchScrimView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

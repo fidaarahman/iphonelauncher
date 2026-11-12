@@ -11,9 +11,10 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityGeneralBinding
+import com.example.launcherapp.ui.model.BlurEffectSettings
 import com.example.launcherapp.ui.model.TextSizeSettings
 
-/** Blur Effect isn't wired to anything yet - Flexible Text Size is (see [TextSizeSettings]). */
+/** Blur Effect (see [BlurEffectSettings]) and Flexible Text Size (see [TextSizeSettings]) are both wired here. */
 class GeneralActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGeneralBinding
@@ -31,6 +32,14 @@ class GeneralActivity : AppCompatActivity() {
         }
 
         setUpFlexibleTextSize()
+        setUpBlurEffect()
+    }
+
+    private fun setUpBlurEffect() {
+        binding.switchBlurEffect.isChecked = BlurEffectSettings.enabled
+        binding.switchBlurEffect.setOnCheckedChangeListener { _, checked ->
+            BlurEffectSettings.enabled = checked
+        }
     }
 
     private fun setUpFlexibleTextSize() {

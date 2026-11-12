@@ -16,6 +16,7 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.BatteryManager
@@ -34,6 +35,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.HapticFeedbackConstants
 import android.view.ViewConfiguration
+import android.view.ViewOutlineProvider
 import android.view.ViewTreeObserver
 import android.view.animation.LinearInterpolator
 import android.widget.ImageView
@@ -66,6 +68,7 @@ import com.example.launcherapp.ui.model.AppLibraryGroup
 import com.example.launcherapp.ui.model.HomeGrid
 import com.example.launcherapp.Repositories.HomeLayoutRepository
 import com.example.launcherapp.ui.model.HomeModel
+import com.example.launcherapp.ui.model.BlurEffectSettings
 import com.example.launcherapp.ui.model.PageTransition
 import com.example.launcherapp.ui.model.PageTransitions
 import com.example.launcherapp.ui.model.TextSizeSettings
@@ -81,8 +84,11 @@ import com.example.launcherapp.ui.model.ThemePack
 import com.example.launcherapp.ui.model.ThemePacks
 import com.example.launcherapp.ui.views.ClockWidgetView
 import com.example.launcherapp.utils.HomeWallpaperStore
+import com.example.launcherapp.utils.SnapshotBlur
 import com.example.launcherapp.views.HomeCellLayout
 import com.example.launcherapp.views.SunArcView
+import eightbitlab.com.blurview.RenderEffectBlur
+import eightbitlab.com.blurview.RenderScriptBlur
 import kotlin.concurrent.thread
 import kotlin.math.PI
 import kotlin.math.hypot
@@ -210,6 +216,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         dragController = DragController(binding.homePager, binding.dock, binding.dragLayer, this)
 
         setupPager()
+        setupBlurViews()
         watchHomePageBottomSpace()
 
         binding.folderOverlay.setOnClickListener { closeFolder() }
@@ -246,8 +253,84 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         applyThemeOrDeviceWallpaper()
         applyPageTransition()
         applyTextSizeScale()
+        applyBlurEffect()
     }
 
+    /** One-time setup for the dock/search pill/folder-panel BlurViews - which algorithm they use never changes, only whether they're shown. */
+    /** One-time setup for the dock/search pill BlurViews - which algorithm they use never changes, only whether they're shown. */
+    private fun setupBlurViews() {
+        val algorithm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            RenderEffectBlur()
+        } else {
+            RenderScriptBlur(this)
+        }
+        val windowBackground = window.decorView.background
+        listOf(binding.dockBlurView, binding.searchPillBlurView).forEach { blurView ->
+            blurView.setupWith(binding.root, algorithm)
+                .setFrameClearDrawable(windowBackground)
+                .setBlurRadius(BLUR_RADIUS)
+            blurView.setOverlayColor(BLUR_OVERLAY_COLOR)
+            blurView.outlineProvider = ViewOutlineProvider.BACKGROUND
+            blurView.clipToOutline = true
+        }
+        // The folder panel gets its blur from a snapshot when it opens (updateFolderScrimHole);
+        // it only needs its rounded clip here.
+        binding.folderPanel.outlineProvider = ViewOutlineProvider.BACKGROUND
+        binding.folderPanel.clipToOutline = true
+    }
+
+    /** Picks up a Blur Effect change made on the General screen - same "no callback" reasoning as above. */
+    /** Picks up a Blur Effect change made on the General screen - same "no callback" reasoning as above. */
+    private fun applyBlurEffect() {
+        val enabled = BlurEffectSettings.enabled
+
+        binding.dockBlurView.isVisible = enabled
+        binding.dockBlurView.alpha = binding.dock.alpha // matches whatever fadeTo() last left the dock at
+        binding.dockBlurView.setBlurAutoUpdate(enabled)
+        binding.dock.background = if (enabled) null else ContextCompat.getDrawable(this, R.drawable.home_dock_background)
+
+        binding.searchPillBlurView.isVisible = enabled
+        binding.searchPillBlurView.alpha = binding.searchPill.alpha // same reasoning
+        binding.searchPillBlurView.setBlurAutoUpdate(enabled)
+        binding.searchPill.background = if (enabled) null else ContextCompat.getDrawable(this, R.drawable.home_glass_pill_background)
+
+        // Folder: no live BlurView any more - the blurred background is made when the folder
+        // opens (updateFolderScrimHole). Until then it has the normal glass background.
+        binding.folderBlurView.isVisible = false
+        binding.folderPanel.background = ContextCompat.getDrawable(this, R.drawable.folder_panel_background)
+    }
+
+    /**
+     * Folder / App Library group panel background. Blur Effect off: the normal glass panel.
+     * Blur Effect on: a blurred SNAPSHOT of the home screen behind the panel (wallpaper + pages +
+     * dock, never the folder itself), made once after the panel is laid out. The scrim is a plain
+     * dark scrim - no hole is cut any more.
+     */
+    private fun updateFolderScrimHole() {
+        binding.folderOverlay.setHole(null, 0f)
+        binding.folderPanel.background = ContextCompat.getDrawable(this, R.drawable.folder_panel_background)
+        if (!BlurEffectSettings.enabled) return
+        binding.folderPanel.post {
+            if (!binding.folderOverlay.isVisible) return@post
+            // Using the phone's own wallpaper (no wallpaper ImageView shown): try to read it to blur;
+            // if Android doesn't allow it, the blur is drawn over dark glass instead.
+            val deviceWallpaper = if (binding.wallpaper.isVisible) {
+                null
+            } else {
+                runCatching { WallpaperManager.getInstance(this).drawable }.getOrNull()
+            }
+            SnapshotBlur.panelBackground(
+                resources = resources,
+                root = binding.root,
+                panel = binding.folderPanel,
+                layers = listOf(binding.wallpaper, binding.homeContent),
+                hideWhileCapturing = listOf(binding.dockBlurView, binding.searchPillBlurView),
+                deviceWallpaper = deviceWallpaper,
+                cornerRadiusPx = dp(FOLDER_PANEL_RADIUS_DP).toFloat(),
+                overlayColor = BLUR_OVERLAY_COLOR
+            )?.let { binding.folderPanel.background = it }
+        }
+    }
     /** Picks up a Flexible Text Size change made on the General screen - same "no callback" reasoning as above. */
     private fun applyTextSizeScale() {
         val scale = TextSizeSettings.scale
@@ -724,18 +807,18 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
                 // Neither the App Library nor the widgets page has a page dot, dock, or search pill.
                 val hideChrome = position == libraryPosition() || position == widgetsPosition()
                 // Faded-out dock/pill are made INVISIBLE too, so they can't steal taps on those pages.
-                fadeTo(binding.dock, visible = !hideChrome)
+                fadeTo(binding.dock, visible = !hideChrome, linked = binding.dockBlurView)
                 if (hideChrome) {
                     binding.root.removeCallbacks(restoreSearchPill)
                     hidePageDotsNow(keepInLayout = false)
-                    fadeTo(binding.searchPill, visible = false)
+                    fadeTo(binding.searchPill, visible = false, linked = binding.searchPillBlurView)
                 } else if (wasOnHiddenChromePage) {
                     // Back from the widgets page / App Library: show ONLY the pill. The dots come back
                     // with opacity 0, so they can't appear next to it - they fade in again on the next
                     // swipe via onPageScrollStateChanged, as usual.
                     binding.root.removeCallbacks(restoreSearchPill)
                     hidePageDotsNow(keepInLayout = true)
-                    fadeTo(binding.searchPill, visible = true)
+                    fadeTo(binding.searchPill, visible = true, linked = binding.searchPillBlurView)
                 }
                 wasOnHiddenChromePage = hideChrome
             }
@@ -796,8 +879,17 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         if (cells.paddingBottom != homePageBottomSpace) cells.updatePadding(bottom = homePageBottomSpace)
     }
 
-    /** Fades a view in/out and makes it INVISIBLE (not tappable) once hidden. */
-    private fun fadeTo(view: View, visible: Boolean) {
+    /**
+     * Fades a view in/out and makes it INVISIBLE (not tappable) once hidden. [linked] - the blur
+     * layer sitting behind [view] - mirrors the same fade, but only while Blur Effect is on;
+     * otherwise it's meant to stay GONE and must not be touched.
+     */
+    private fun fadeTo(view: View, visible: Boolean, linked: View? = null) {
+        animateAlpha(view, visible)
+        if (linked != null && BlurEffectSettings.enabled) animateAlpha(linked, visible)
+    }
+
+    private fun animateAlpha(view: View, visible: Boolean) {
         view.animate().cancel()
         if (visible) {
             view.visibility = View.VISIBLE
@@ -1349,6 +1441,11 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
     private fun showSearchPill(show: Boolean) {
         binding.searchPill.animate().alpha(if (show) 1f else 0f).setDuration(160).start()
         binding.pageIndicator.animate().alpha(if (show) 0f else 1f).setDuration(160).start()
+        // The blur layer behind the pill has to crossfade with it too, or it stays visible behind
+        // the dots the whole time Blur Effect is on - see fadeTo()'s [linked] handling above.
+        if (BlurEffectSettings.enabled) {
+            binding.searchPillBlurView.animate().alpha(if (show) 1f else 0f).setDuration(160).start()
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1396,6 +1493,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             binding.folderGrid.addView(cell)
         }
         binding.folderOverlay.isVisible = true
+        updateFolderScrimHole()
     }
 
     private fun closeFolder() {
@@ -1420,6 +1518,7 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
             binding.folderGrid.addView(cell)
         }
         binding.folderOverlay.isVisible = true
+        updateFolderScrimHole()
     }
 
     /**
@@ -1462,6 +1561,12 @@ class LauncherHomeActivity : AppCompatActivity(), DragController.Host {
         // Base sizes Flexible Text Size scales from - must match HomeIconLabel / item_folder_app.xml.
         private const val HOME_LABEL_BASE_SP = 11f
         private const val FOLDER_LABEL_BASE_SP = 11f
+        // Dock/search-pill backdrop blur (Blur Effect) - radius in dp-ish units the library expects;
+        // overlay tint matches the flat glass look's own #33FFFFFF fill.
+        private const val BLUR_RADIUS = 16f
+        private const val BLUR_OVERLAY_COLOR = 0x33FFFFFF
+        // Must match folder_panel_background's / bg_blur_mask_folder's corner radius.
+        private const val FOLDER_PANEL_RADIUS_DP = 28
     }
 }
 
