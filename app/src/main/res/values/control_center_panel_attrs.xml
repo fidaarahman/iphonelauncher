@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- com.example.launcherapp.views.ControlCenterGrid -->
+    <declare-styleable name="ControlCenterGrid">
+        <attr name="ccColumns" format="integer" />
+        <attr name="ccGap" format="dimension" />
+    </declare-styleable>
+</resources>

@@ -1,17 +1,31 @@
 package com.example.launcherapp.ui.activities
 
+import android.animation.ValueAnimator
 import android.app.AlertDialog
+import android.app.Dialog
 import android.app.TimePickerDialog
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.example.launcherapp.R
 import com.example.launcherapp.databinding.ActivityControlCenterBinding
+import com.example.launcherapp.databinding.DialogControlCenterTutorialBinding
 import com.example.launcherapp.databinding.DialogNightShiftBinding
 import com.example.launcherapp.databinding.DialogPermissionRequiredBinding
 import com.example.launcherapp.databinding.DialogResizeBinding
@@ -71,6 +85,9 @@ class ControlCenterActivity : AppCompatActivity() {
         binding.switchControlCenter.isChecked = if (pendingControlCenterEnable && accessibilityOn) {
             pendingControlCenterEnable = false
             ControlCenterSettings.enabled = true
+            notifyControlCenterChanged()
+            // Just came back from turning Accessibility on: show how to open it (like the reference app).
+            binding.root.post { showControlCenterTutorial() }
             true
         } else {
             // Keeps the toggle honest if Accessibility got revoked from system Settings directly.
@@ -97,7 +114,78 @@ class ControlCenterActivity : AppCompatActivity() {
                 return@setOnCheckedChangeListener
             }
             ControlCenterSettings.enabled = checked
+            notifyControlCenterChanged()
+            if (checked) showControlCenterTutorial()
         }
+    }
+
+    /** Tells the running service to show / hide its top-right trigger line right away. */
+    private fun notifyControlCenterChanged() {
+        sendBroadcast(Intent(ControlCenterSettings.ACTION_REFRESH_CONTROL_CENTER).setPackage(packageName))
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // "Hold & drag to open Control Center" tutorial
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Full-screen dimmed overlay with an animated arrow + hand pointing at the real trigger line
+     * (drawn by the service at the top-right edge), "Hold & drag to open Control Center",
+     * "Edge settings" and "Got it" - like the reference app.
+     */
+    private fun showControlCenterTutorial() {
+        if (isFinishing || isDestroyed) return
+        val tutorial = DialogControlCenterTutorialBinding.inflate(layoutInflater)
+        val dialog = Dialog(this, android.R.style.Theme_Translucent_NoTitleBar)
+        dialog.setContentView(tutorial.root)
+        dialog.window?.apply {
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+        }
+
+        // "Hold & drag" in yellow, the rest in white.
+        val highlight = getString(R.string.cc_tutorial_highlight)
+        tutorial.tutorialTitle.text = SpannableStringBuilder(highlight)
+            .apply {
+                setSpan(ForegroundColorSpan(TUTORIAL_HIGHLIGHT_COLOR), 0, highlight.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                append(" ")
+                append(getString(R.string.cc_tutorial_rest))
+            }
+
+        // The pointer sits under the middle of the trigger line: the line covers the right half of
+        // the top edge, so its middle is at 75% of the screen width.
+        tutorial.tutorialPointer.post {
+            val screenWidth = tutorial.root.width
+            val params = tutorial.tutorialPointer.layoutParams as FrameLayout.LayoutParams
+            params.marginStart = (screenWidth * 0.75f - tutorial.tutorialPointer.width / 2f).toInt().coerceAtLeast(0)
+            params.topMargin = (TUTORIAL_POINTER_GAP_DP * resources.displayMetrics.density).toInt()
+            tutorial.tutorialPointer.layoutParams = params
+        }
+        val bounce = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = TUTORIAL_BOUNCE_MS
+            repeatMode = ValueAnimator.RESTART
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener {
+                val t = it.animatedValue as Float
+                tutorial.tutorialPointer.translationY = t * resources.displayMetrics.density * TUTORIAL_BOUNCE_DP
+                tutorial.tutorialPointer.alpha = if (t < 0.8f) 1f else (1f - t) / 0.2f
+            }
+        }
+
+        tutorial.tutorialEdgeSettings.setOnClickListener {
+            dialog.dismiss()
+            // Edge Trigger settings screen comes in the next step.
+            Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show()
+        }
+        tutorial.tutorialGotIt.setOnClickListener { dialog.dismiss() }
+        tutorial.root.setOnClickListener { /* swallow taps on the dim background */ }
+        tutorial.tutorialPointer.visibility = View.VISIBLE
+
+        dialog.setOnDismissListener { bounce.cancel() }
+        dialog.show()
+        bounce.start()
     }
 
     private fun showPermissionRequiredSheet() {
@@ -211,6 +299,13 @@ class ControlCenterActivity : AppCompatActivity() {
 
     private fun formatMinutesAsTime(minutes: Int): String =
         "%02d:%02d".format(minutes / 60, minutes % 60)
+
+    private companion object {
+        val TUTORIAL_HIGHLIGHT_COLOR = Color.parseColor("#FFD60A")
+        const val TUTORIAL_POINTER_GAP_DP = 12f
+        const val TUTORIAL_BOUNCE_MS = 1400L
+        const val TUTORIAL_BOUNCE_DP = 70f
+    }
 
     private fun applySystemBarInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->

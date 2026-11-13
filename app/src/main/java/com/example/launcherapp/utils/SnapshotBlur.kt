@@ -60,6 +60,8 @@ object SnapshotBlur {
      * Dock / search pill backgrounds (any thread): blurs [wallpaper] as it's shown full-screen
      * (centerCrop over [screenWidth] x [screenHeight]) and returns one background per region.
      * Pass a COPY of the wallpaper drawable (constantState.newDrawable()), not the one on screen.
+     * [blurRadiusPx] is in the 1/8-size bitmap (default ~40px on screen); bigger = blurrier
+     * (Control Center uses a much stronger blur so nothing behind it can be read).
      * @return one drawable per region (same order), or null if anything went wrong.
      */
     fun regionBackgrounds(
@@ -69,13 +71,14 @@ object SnapshotBlur {
         screenHeight: Int,
         regions: List<Rect>,
         cornerRadiiPx: List<Float>,
-        overlayColor: Int
+        overlayColor: Int,
+        blurRadiusPx: Int = BLUR_RADIUS_PX
     ): List<Drawable>? = runCatching {
         if (screenWidth <= 0 || screenHeight <= 0 || regions.isEmpty()) return null
         val small = newSmallBitmap(screenWidth, screenHeight)
         val canvas = scaledCanvas(small, screenWidth, screenHeight)
         drawCenterCrop(canvas, wallpaper, screenWidth, screenHeight)
-        boxBlur(small, BLUR_RADIUS_PX, BLUR_PASSES)
+        boxBlur(small, blurRadiusPx, BLUR_PASSES)
         regions.mapIndexed { index, region ->
             rounded(resources, crop(small, screenWidth, screenHeight, region), cornerRadiiPx[index], overlayColor)
         }

@@ -108,4 +108,16 @@
     <string name="page_transition_option_default">Default</string>
     <string name="page_transition_option_zoom_in">Zoom in</string>
     <string name="page_transition_option_alpha">Alpha</string>
+    <string name="cc_not_playing">Not Playing</string>
+    <string name="cc_media_allow">Tap to show what\'s playing</string>
+    <string name="cc_focus">Focus</string>
+    <string name="cc_flashlight">Flashlight</string>
+    <string name="cc_on">On</string>
+    <string name="cc_off">Off</string>
+
+    <string name="cc_tutorial_highlight">Hold &amp; drag</string>
+    <string name="cc_tutorial_rest">to open Control Center</string>
+    <string name="cc_tutorial_edge_settings">Edge settings</string>
+    <string name="cc_tutorial_got_it">Got it</string>
+    <string name="cc_tutorial_hand" translatable="false">👆</string>
 </resources>

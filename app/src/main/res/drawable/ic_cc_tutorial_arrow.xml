@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Down arrow under the Control Center trigger line (tutorial). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="64dp"
+    android:viewportWidth="24"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M10.5,0 L13.5,0 L13.5,50 L10.5,50 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,46 L21,46 L12,63 Z" />
+</vector>

@@ -8,6 +8,9 @@ object ControlCenterSettings {
     /** Sent app-locally when Night Shift settings are saved, so the already-running service re-checks immediately instead of waiting for its next periodic check. */
     const val ACTION_REFRESH_NIGHT_SHIFT = "com.example.launcherapp.action.REFRESH_NIGHT_SHIFT"
 
+    /** Sent app-locally when Control Center is switched on/off, so the running service shows/hides its top-right trigger line right away. */
+    const val ACTION_REFRESH_CONTROL_CENTER = "com.example.launcherapp.action.REFRESH_CONTROL_CENTER"
+
     private const val KEY_ENABLED = "control_center_enabled"
     private const val KEY_VIBRATION_ENABLED = "control_center_vibration_enabled"
 

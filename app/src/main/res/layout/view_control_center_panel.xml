@@ -1,152 +1,504 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The actual floating Control Center panel, added over other apps by ControlCenterAccessibilityService. -->
+<!--
+    Control Center panel (Figma), shown full-screen over other apps by
+    ControlCenterAccessibilityService; tiles are run by ControlCenterPanel.
+
+    Tiles sit on a 4-column square grid (ControlCenterGrid): android:tag = "column,row,spanX,spanY".
+    Top padding (status bar + gap) is set in code. Icons: ic_cc_* (exported from Figma, white).
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_control_center_panel"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:padding="20dp">
+    android:orientation="horizontal"
+    android:paddingStart="20dp"
+    android:paddingEnd="8dp">
 
-    <View
-        android:layout_width="36dp"
-        android:layout_height="4dp"
-        android:layout_marginBottom="18dp"
-        android:background="@drawable/bg_rounded_white_4dp"
-        android:alpha="0.5" />
-
-    <LinearLayout
-        android:layout_width="wrap_content"
+    <com.example.launcherapp.views.ControlCenterGrid
+        android:id="@+id/ccGrid"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_weight="1"
+        app:ccColumns="4"
+        app:ccGap="14dp">
 
-        <!-- Flashlight -->
-        <LinearLayout
-            android:layout_width="76dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <FrameLayout
-                android:id="@+id/ccFlashlightTile"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/bg_chip_round_off">
-
-                <ImageView
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_glyph_flashlight" />
-
-            </FrameLayout>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/control_center_tile_flashlight"
-                android:textColor="@android:color/white"
-                android:textSize="11sp" />
-
-        </LinearLayout>
-
-        <!-- WiFi -->
-        <LinearLayout
-            android:layout_width="76dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <FrameLayout
-                android:id="@+id/ccWifiTile"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/bg_chip_round_blue">
-
-                <ImageView
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_glyph_wifi" />
-
-            </FrameLayout>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/control_center_tile_wifi"
-                android:textColor="@android:color/white"
-                android:textSize="11sp" />
-
-        </LinearLayout>
-
-        <!-- Bluetooth -->
-        <LinearLayout
-            android:layout_width="76dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <FrameLayout
-                android:id="@+id/ccBluetoothTile"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/bg_chip_round_indigo">
-
-                <ImageView
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_glyph_bluetooth" />
-
-            </FrameLayout>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/control_center_tile_bluetooth"
-                android:textColor="@android:color/white"
-                android:textSize="11sp" />
-
-        </LinearLayout>
-
-        <!-- Airplane Mode -->
-        <LinearLayout
-            android:layout_width="76dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
+        <!-- ===== Connectivity (2x2): Airplane, AirDrop, Wi-Fi + 4 small (Cellular, Bluetooth, Hotspot, VPN) ===== -->
+        <com.example.launcherapp.views.ControlCenterGrid
+            android:id="@+id/ccConnectivityTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_tile"
+            android:padding="14dp"
+            android:tag="0,0,2,2"
+            app:ccColumns="2"
+            app:ccGap="12dp">
 
             <FrameLayout
                 android:id="@+id/ccAirplaneTile"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/bg_chip_round_off">
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_cc_circle_off"
+                android:tag="0,0">
 
                 <ImageView
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
+                    android:id="@+id/ccAirplaneIcon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_glyph_airplane" />
+                    android:src="@drawable/ic_cc_airplane" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/ccAirDropTile"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_cc_circle_off"
+                android:tag="1,0">
+
+                <ImageView
+                    android:id="@+id/ccAirDropIcon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_airdrop" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/ccWifiTile"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_cc_circle_off"
+                android:tag="0,1">
+
+                <ImageView
+                    android:id="@+id/ccWifiIcon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_wifi" />
+            </FrameLayout>
+
+            <!-- Four small toggles in the bottom-right quarter -->
+            <com.example.launcherapp.views.ControlCenterGrid
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="3dp"
+                android:tag="1,1"
+                app:ccColumns="2"
+                app:ccGap="5dp">
+
+                <FrameLayout
+                    android:id="@+id/ccCellularTile"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_cc_circle_off"
+                    android:tag="0,0">
+
+                    <ImageView
+                        android:id="@+id/ccCellularIcon"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_cc_cellular" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/ccBluetoothTile"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_cc_circle_off"
+                    android:tag="1,0">
+
+                    <ImageView
+                        android:id="@+id/ccBluetoothIcon"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_cc_bluetooth" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/ccHotspotTile"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_cc_circle_off"
+                    android:tag="0,1">
+
+                    <ImageView
+                        android:id="@+id/ccHotspotIcon"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_cc_hotspot" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/ccVpnTile"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_cc_circle_off"
+                    android:tag="1,1">
+
+                    <ImageView
+                        android:id="@+id/ccVpnIcon"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_cc_vpn" />
+                </FrameLayout>
+
+            </com.example.launcherapp.views.ControlCenterGrid>
+
+        </com.example.launcherapp.views.ControlCenterGrid>
+
+        <!-- ===== Media (2x2) ===== -->
+        <LinearLayout
+            android:id="@+id/ccMediaTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_tile"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:tag="2,0,2,2">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp">
+
+                <ImageView
+                    android:id="@+id/ccMediaArtwork"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="start|top"
+                    android:background="@drawable/bg_cc_artwork"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop" />
+
+                <FrameLayout
+                    android:id="@+id/ccAirPlayButton"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_gravity="end|top"
+                    android:background="@drawable/bg_cc_circle_off">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_cc_airplay" />
+                </FrameLayout>
 
             </FrameLayout>
 
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
             <TextView
-                android:layout_width="wrap_content"
+                android:id="@+id/ccMediaTitle"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/control_center_tile_airplane"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/cc_not_playing"
                 android:textColor="@android:color/white"
-                android:textSize="11sp" />
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/ccMediaArtist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/ccMediaPrevious"
+                    android:layout_width="0dp"
+                    android:layout_height="20dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_previous" />
+
+                <ImageView
+                    android:id="@+id/ccMediaPlay"
+                    android:layout_width="0dp"
+                    android:layout_height="26dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_play" />
+
+                <ImageView
+                    android:id="@+id/ccMediaNext"
+                    android:layout_width="0dp"
+                    android:layout_height="20dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_next" />
+
+            </LinearLayout>
 
         </LinearLayout>
+
+        <!-- ===== Camera / Silent (1x1 each) ===== -->
+        <FrameLayout
+            android:id="@+id/ccCameraTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_circle_off"
+            android:tag="0,2">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cc_camera" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/ccSilentTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_circle_off"
+            android:tag="1,2">
+
+            <ImageView
+                android:id="@+id/ccSilentIcon"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cc_silent" />
+        </FrameLayout>
+
+        <!-- ===== Focus pill (2x1) ===== -->
+        <LinearLayout
+            android:id="@+id/ccFocusTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="12dp"
+            android:tag="0,3,2,1">
+
+            <FrameLayout
+                android:id="@+id/ccFocusBadge"
+                android:layout_width="40dp"
+                android:layout_height="40dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_focus" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:maxLines="1"
+                    android:text="@string/cc_focus"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/ccFocusDetail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:text="@string/cc_off"
+                    android:textColor="#B3FFFFFF"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- ===== Brightness / Volume sliders (1x2 each) ===== -->
+        <com.example.launcherapp.views.VerticalSliderView
+            android:id="@+id/ccBrightnessSlider"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:tag="2,2,1,2" />
+
+        <com.example.launcherapp.views.VerticalSliderView
+            android:id="@+id/ccVolumeSlider"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:tag="3,2,1,2" />
+
+        <!-- ===== Flashlight (2x2, the bulb tile) ===== -->
+        <FrameLayout
+            android:id="@+id/ccFlashlightTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_tile"
+            android:padding="14dp"
+            android:tag="0,4,2,2">
+
+            <FrameLayout
+                android:id="@+id/ccFlashlightBadge"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="start|top">
+
+                <ImageView
+                    android:id="@+id/ccFlashlightIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cc_flashlight" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start|bottom"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/cc_flashlight"
+                    android:textColor="@android:color/white"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/ccFlashlightDetail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/cc_off"
+                    android:textColor="#B3FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <!-- ===== Rotation lock / Screen mirroring / Battery (1x1 each) ===== -->
+        <FrameLayout
+            android:id="@+id/ccRotationTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_circle_off"
+            android:tag="2,4">
+
+            <ImageView
+                android:id="@+id/ccRotationIcon"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cc_rotation_lock" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/ccMirroringTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_circle_off"
+            android:tag="3,4">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cc_mirroring" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/ccBatteryTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_circle_off"
+            android:tag="2,5">
+
+            <ImageView
+                android:id="@+id/ccBatteryIcon"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cc_battery" />
+        </FrameLayout>
+
+    </com.example.launcherapp.views.ControlCenterGrid>
+
+    <!-- ===== Right-side page column (decoration for now, like iOS's page indicator) ===== -->
+    <LinearLayout
+        android:id="@+id/ccPageColumn"
+        android:layout_width="24dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="8dp"
+        android:alpha="0.85"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cc_page_favorites" />
+
+        <View
+            android:layout_width="9dp"
+            android:layout_height="9dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_cc_page_dot" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cc_page_music" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cc_page_home" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cc_page_connectivity" />
 
     </LinearLayout>
 
