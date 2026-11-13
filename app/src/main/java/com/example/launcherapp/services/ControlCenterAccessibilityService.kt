@@ -42,6 +42,7 @@ import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.DialogControlCenterTutorialBinding
@@ -546,7 +547,10 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         container.addView(backdrop, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
         val content = LayoutInflater.from(this).inflate(R.layout.view_control_center_panel, container, false)
-        content.updatePadding(top = statusBarHeightPx() + dp(PANEL_TOP_GAP_DP), bottom = dp(PANEL_BOTTOM_GAP_DP))
+        content.updatePadding(bottom = dp(PANEL_BOTTOM_GAP_DP))
+        // Our own status row (time/signal/Wi-Fi/battery) stands in for the real status bar, which
+        // isn't reliably visible above this overlay - sized to match it exactly.
+        content.findViewById<View>(R.id.ccStatusBar).updateLayoutParams { height = statusBarHeightPx() }
         container.addView(
             content,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -809,7 +813,6 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         private const val MAX_TINT_ALPHA = 100
 
         // Panel window
-        private const val PANEL_TOP_GAP_DP = 28
         private const val PANEL_BOTTOM_GAP_DP = 24
         private const val PANEL_SLIDE_DP = 40
         private const val ANIM_IN_MS = 240L

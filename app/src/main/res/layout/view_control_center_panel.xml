@@ -1,26 +1,105 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    Control Center panel (Figma), shown full-screen over other apps by
-    ControlCenterAccessibilityService; tiles are run by ControlCenterPanel.
-
-    Tiles sit on a 4-column square grid (ControlCenterGrid): android:tag = "column,row,spanX,spanY".
-    Top padding (status bar + gap) is set in code. Icons: ic_cc_* (exported from Figma, white).
--->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:paddingStart="20dp"
-    android:paddingEnd="8dp">
+    android:background="@drawable/bg_control_center">
+
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/ccStatusBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_25sdp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/ccStatusClock"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="@android:color/white"
+            android:textSize="15sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/ccStatusSignal"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/ccStatusSignal"
+            android:layout_width="18dp"
+            android:layout_height="12dp"
+            android:layout_marginEnd="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cc_status_signal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/ccStatusWifi"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/ccStatusWifi"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="6dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_glyph_wifi"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/ccStatusBatteryFrame"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <FrameLayout
+            android:id="@+id/ccStatusBatteryFrame"
+            android:layout_width="22dp"
+            android:layout_height="11dp"
+            android:background="@drawable/bg_cc_status_battery_outline"
+            android:padding="2dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/ccStatusBatteryNub"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <View
+                android:id="@+id/ccStatusBatteryFill"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/white" />
+        </FrameLayout>
+
+        <View
+            android:id="@+id/ccStatusBatteryNub"
+            android:layout_width="2dp"
+            android:layout_height="5dp"
+            android:layout_marginStart="1dp"
+            android:background="@drawable/bg_cc_status_battery_nub"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/ccStatusBar"
+        android:layout_marginTop="28dp">
 
     <com.example.launcherapp.views.ControlCenterGrid
         android:id="@+id/ccGrid"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
         app:ccColumns="4"
-        app:ccGap="14dp">
+        app:ccGap="14dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <!-- ===== Connectivity (2x2): Airplane, AirDrop, Wi-Fi + 4 small (Cellular, Bluetooth, Hotspot, VPN) ===== -->
         <com.example.launcherapp.views.ControlCenterGrid
@@ -42,11 +121,12 @@
 
                 <ImageView
                     android:id="@+id/ccAirplaneIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_airplane" />
+                    android:src="@drawable/ic_cc_airplane"
+                    app:tint="@android:color/white" />
             </FrameLayout>
 
             <FrameLayout
@@ -58,11 +138,12 @@
 
                 <ImageView
                     android:id="@+id/ccAirDropIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_airdrop" />
+                    android:src="@drawable/ic_cc_airdrop"
+                    app:tint="@android:color/white" />
             </FrameLayout>
 
             <FrameLayout
@@ -74,11 +155,12 @@
 
                 <ImageView
                     android:id="@+id/ccWifiIcon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_wifi" />
+                    android:src="@drawable/ic_cc_wifi"
+                    app:tint="@android:color/white" />
             </FrameLayout>
 
             <!-- Four small toggles in the bottom-right quarter -->
@@ -99,11 +181,12 @@
 
                     <ImageView
                         android:id="@+id/ccCellularIcon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_cc_cellular" />
+                        android:src="@drawable/ic_cc_cellular"
+                        app:tint="@android:color/white" />
                 </FrameLayout>
 
                 <FrameLayout
@@ -115,11 +198,12 @@
 
                     <ImageView
                         android:id="@+id/ccBluetoothIcon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_cc_bluetooth" />
+                        android:src="@drawable/ic_cc_bluetooth"
+                        app:tint="@android:color/white" />
                 </FrameLayout>
 
                 <FrameLayout
@@ -131,11 +215,12 @@
 
                     <ImageView
                         android:id="@+id/ccHotspotIcon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_cc_hotspot" />
+                        android:src="@drawable/ic_cc_hotspot"
+                        app:tint="@android:color/white" />
                 </FrameLayout>
 
                 <FrameLayout
@@ -147,11 +232,12 @@
 
                     <ImageView
                         android:id="@+id/ccVpnIcon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_cc_vpn" />
+                        android:src="@drawable/ic_cc_vpn"
+                        app:tint="@android:color/white" />
                 </FrameLayout>
 
             </com.example.launcherapp.views.ControlCenterGrid>
@@ -159,18 +245,21 @@
         </com.example.launcherapp.views.ControlCenterGrid>
 
         <!-- ===== Media (2x2) ===== -->
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/ccMediaTile"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@drawable/bg_cc_tile"
-            android:orientation="vertical"
             android:padding="12dp"
             android:tag="2,0,2,2">
 
             <FrameLayout
+                android:id="@+id/ccMediaArtworkFrame"
                 android:layout_width="match_parent"
-                android:layout_height="40dp">
+                android:layout_height="40dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
                 <ImageView
                     android:id="@+id/ccMediaArtwork"
@@ -189,74 +278,87 @@
                     android:background="@drawable/bg_cc_circle_off">
 
                     <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_cc_airplay" />
+                        android:src="@drawable/ic_cc_airplay"
+                        app:tint="@android:color/white" />
                 </FrameLayout>
 
             </FrameLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
             <TextView
                 android:id="@+id/ccMediaTitle"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
                 android:maxLines="1"
                 android:text="@string/cc_not_playing"
                 android:textColor="@android:color/white"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                app:layout_constraintBottom_toTopOf="@id/ccMediaArtist"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent" />
 
             <TextView
                 android:id="@+id/ccMediaArtist"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="#B3FFFFFF"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                app:layout_constraintBottom_toTopOf="@id/ccMediaControls"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent" />
 
-            <LinearLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/ccMediaControls"
                 android:layout_width="match_parent"
                 android:layout_height="28dp"
                 android:layout_marginTop="4dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent">
 
                 <ImageView
                     android:id="@+id/ccMediaPrevious"
-                    android:layout_width="0dp"
-                    android:layout_height="20dp"
-                    android:layout_weight="1"
+                    android:layout_width="20dp"
+                    android:layout_height="11dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_previous" />
+                    android:src="@drawable/ic_cc_previous"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/ccMediaPlay"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
                 <ImageView
                     android:id="@+id/ccMediaPlay"
-                    android:layout_width="0dp"
+                    android:layout_width="24dp"
                     android:layout_height="26dp"
-                    android:layout_weight="1"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_play" />
+                    android:src="@drawable/ic_cc_play"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/ccMediaNext"
+                    app:layout_constraintStart_toEndOf="@id/ccMediaPrevious"
+                    app:layout_constraintTop_toTopOf="parent" />
 
                 <ImageView
                     android:id="@+id/ccMediaNext"
-                    android:layout_width="0dp"
-                    android:layout_height="20dp"
-                    android:layout_weight="1"
+                    android:layout_width="20dp"
+                    android:layout_height="11dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_next" />
+                    android:src="@drawable/ic_cc_next"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/ccMediaPlay"
+                    app:layout_constraintTop_toTopOf="parent" />
 
-            </LinearLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
-        </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- ===== Camera / Silent (1x1 each) ===== -->
         <FrameLayout
@@ -267,11 +369,12 @@
             android:tag="0,2">
 
             <ImageView
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_cc_camera" />
+                android:src="@drawable/ic_cc_camera"
+                app:tint="@android:color/white" />
         </FrameLayout>
 
         <FrameLayout
@@ -283,21 +386,20 @@
 
             <ImageView
                 android:id="@+id/ccSilentIcon"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_cc_silent" />
+                android:src="@drawable/ic_cc_silent"
+                app:tint="@android:color/white" />
         </FrameLayout>
 
         <!-- ===== Focus pill (2x1) ===== -->
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/ccFocusTile"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@drawable/bg_cc_pill"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
             android:paddingStart="10dp"
             android:paddingEnd="12dp"
             android:tag="0,3,2,1">
@@ -305,44 +407,52 @@
             <FrameLayout
                 android:id="@+id/ccFocusBadge"
                 android:layout_width="40dp"
-                android:layout_height="40dp">
+                android:layout_height="40dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
                 <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_focus" />
+                    android:src="@drawable/ic_cc_focus"
+                    app:tint="@android:color/white" />
             </FrameLayout>
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/ccFocusTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/cc_focus"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                app:layout_constraintBottom_toTopOf="@id/ccFocusDetail"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/ccFocusBadge"
+                app:layout_constraintTop_toTopOf="@id/ccFocusBadge"
+                app:layout_constraintVertical_chainStyle="packed" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:fontFamily="sans-serif-medium"
-                    android:maxLines="1"
-                    android:text="@string/cc_focus"
-                    android:textColor="@android:color/white"
-                    android:textSize="14sp" />
+            <TextView
+                android:id="@+id/ccFocusDetail"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:maxLines="1"
+                android:text="@string/cc_off"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp"
+                app:layout_constraintBottom_toBottomOf="@id/ccFocusBadge"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/ccFocusBadge"
+                app:layout_constraintTop_toBottomOf="@id/ccFocusTitle" />
 
-                <TextView
-                    android:id="@+id/ccFocusDetail"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:maxLines="1"
-                    android:text="@string/cc_off"
-                    android:textColor="#B3FFFFFF"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-        </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- ===== Brightness / Volume sliders (1x2 each) ===== -->
         <com.example.launcherapp.views.VerticalSliderView
@@ -374,26 +484,29 @@
 
                 <ImageView
                     android:id="@+id/ccFlashlightIcon"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_cc_flashlight" />
+                    android:src="@drawable/ic_cc_flashlight"
+                    app:tint="@android:color/white" />
             </FrameLayout>
 
-            <LinearLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="start|bottom"
-                android:orientation="vertical">
+                android:layout_gravity="start|bottom">
 
                 <TextView
+                    android:id="@+id/ccFlashlightTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-medium"
                     android:text="@string/cc_flashlight"
                     android:textColor="@android:color/white"
-                    android:textSize="15sp" />
+                    android:textSize="15sp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
                 <TextView
                     android:id="@+id/ccFlashlightDetail"
@@ -401,8 +514,12 @@
                     android:layout_height="wrap_content"
                     android:text="@string/cc_off"
                     android:textColor="#B3FFFFFF"
-                    android:textSize="13sp" />
-            </LinearLayout>
+                    android:textSize="13sp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/ccFlashlightTitle" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
         </FrameLayout>
 
@@ -416,11 +533,12 @@
 
             <ImageView
                 android:id="@+id/ccRotationIcon"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_cc_rotation_lock" />
+                android:src="@drawable/ic_cc_rotation_lock"
+                app:tint="@android:color/white" />
         </FrameLayout>
 
         <FrameLayout
@@ -431,11 +549,12 @@
             android:tag="3,4">
 
             <ImageView
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_cc_mirroring" />
+                android:src="@drawable/ic_cc_mirroring"
+                app:tint="@android:color/white" />
         </FrameLayout>
 
         <FrameLayout
@@ -447,59 +566,16 @@
 
             <ImageView
                 android:id="@+id/ccBatteryIcon"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="40dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_cc_battery" />
+                android:src="@drawable/ic_cc_battery"
+                app:tint="@android:color/white" />
         </FrameLayout>
 
     </com.example.launcherapp.views.ControlCenterGrid>
 
-    <!-- ===== Right-side page column (decoration for now, like iOS's page indicator) ===== -->
-    <LinearLayout
-        android:id="@+id/ccPageColumn"
-        android:layout_width="24dp"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
-        android:layout_marginStart="8dp"
-        android:alpha="0.85"
-        android:gravity="center_horizontal"
-        android:orientation="vertical">
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_cc_page_favorites" />
-
-        <View
-            android:layout_width="9dp"
-            android:layout_height="9dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_cc_page_dot" />
-
-        <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginTop="16dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_cc_page_music" />
-
-        <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginTop="16dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_cc_page_home" />
-
-        <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginTop="16dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_cc_page_connectivity" />
-
-    </LinearLayout>
-
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

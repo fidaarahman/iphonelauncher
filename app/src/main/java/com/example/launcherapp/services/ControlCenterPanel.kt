@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -21,6 +23,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -29,6 +32,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.Settings
 import android.telephony.TelephonyManager
+import android.text.format.DateFormat
 import android.view.KeyEvent
 import android.view.View
 import android.widget.ImageView
@@ -36,6 +40,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.example.launcherapp.R
 import com.example.launcherapp.views.VerticalSliderView
+import java.util.Date
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -71,6 +76,10 @@ class ControlCenterPanel(
     private val torchId: String? by lazy { torchCameraId(cameraManager) }
 
     // ---- Views --------------------------------------------------------------------------------
+    private val statusClock: TextView = root.findViewById(R.id.ccStatusClock)
+    private val statusWifiIcon: ImageView = root.findViewById(R.id.ccStatusWifi)
+    private val statusBatteryFill: View = root.findViewById(R.id.ccStatusBatteryFill)
+
     private val airplaneTile: View = root.findViewById(R.id.ccAirplaneTile)
     private val airplaneIcon: ImageView = root.findViewById(R.id.ccAirplaneIcon)
     private val airDropTile: View = root.findViewById(R.id.ccAirDropTile)
@@ -133,11 +142,25 @@ class ControlCenterPanel(
 
     private val refreshRunnable = Runnable { refreshStates() }
 
+    // ---- Status row (time, signal, Wi-Fi, battery) -------------------------------------------
+    private val clockRunnable = object : Runnable {
+        override fun run() {
+            updateClock()
+            handler.postDelayed(this, CLOCK_UPDATE_MS)
+        }
+    }
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = renderStatusBattery(intent)
+    }
+
     // -------------------------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------------------------
 
     fun start() {
+        statusBatteryFill.pivotX = 0f
+        handler.post(clockRunnable)
+        runCatching { context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }
         bindConnectivity()
         bindMedia()
         bindControls()
@@ -151,13 +174,29 @@ class ControlCenterPanel(
 
     fun stop() {
         handler.removeCallbacksAndMessages(null)
+        runCatching { context.unregisterReceiver(batteryReceiver) }
         runCatching { cameraManager.unregisterTorchCallback(torchCallback) }
         runCatching { sessionManager.removeOnActiveSessionsChangedListener(sessionsListener) }
         controller?.unregisterCallback(controllerCallback)
         controller = null
     }
 
+    private fun updateClock() {
+        statusClock.text = DateFormat.getTimeFormat(context).format(Date())
+    }
+
+    private fun renderStatusBattery(intent: Intent) {
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        if (level < 0 || scale <= 0) return
+        statusBatteryFill.scaleX = (level / scale.toFloat()).coerceIn(0f, 1f)
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        statusBatteryFill.setBackgroundColor(if (charging) STATUS_BATTERY_CHARGING_COLOR else Color.WHITE)
+    }
+
     private fun refreshStates() {
+        statusWifiIcon.alpha = if (wifiOn()) 1f else STATUS_WIFI_OFF_ALPHA
         renderRound(airplaneTile, airplaneIcon, airplaneOn(), R.drawable.bg_cc_circle_orange)
         renderRound(airDropTile, airDropIcon, false)
         renderRound(wifiTile, wifiIcon, wifiOn())
@@ -166,10 +205,10 @@ class ControlCenterPanel(
         renderRound(hotspotTile, hotspotIcon, false)
         renderRound(vpnTile, vpnIcon, vpnOn())
         renderRound(silentTile, silentIcon, silentOn(), R.drawable.bg_cc_circle_white, SILENT_ON_ICON)
-        renderFocus()
-        renderFlashlight()
         renderRound(rotationTile, rotationIcon, rotationLocked(), R.drawable.bg_cc_circle_white, ROTATION_ON_ICON)
         batteryIcon.imageTintList = ColorStateList.valueOf(if (power.isPowerSaveMode) BATTERY_SAVER_ICON else Color.WHITE)
+        renderFocus()
+        renderFlashlight()
         if (!brightnessSlider.isTracking) brightnessSlider.value = currentBrightness()
         if (!volumeSlider.isTracking) volumeSlider.value = currentVolume()
     }
@@ -339,9 +378,13 @@ class ControlCenterPanel(
         cameraTile.setOnClickListener { open(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)) }
 
         silentTile.setOnClickListener {
+            if (!notifications.isNotificationPolicyAccessGranted) {
+                open(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                return@setOnClickListener
+            }
             val target = if (silentOn()) AudioManager.RINGER_MODE_NORMAL else AudioManager.RINGER_MODE_VIBRATE
-            val changed = runCatching { audio.ringerMode = target }.isSuccess
-            if (changed) refreshStates() else open(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+            runCatching { audio.ringerMode = target }
+            refreshStates()
         }
 
         focusTile.setOnClickListener {
@@ -380,7 +423,7 @@ class ControlCenterPanel(
 
     private fun renderFocus() {
         val on = focusOn()
-        focusBadge.background = circle(if (on) FOCUS_ON_COLOR else BADGE_OFF_COLOR)
+        if (on) focusBadge.background = circle(FOCUS_ON_COLOR) else focusBadge.setBackgroundResource(R.drawable.bg_cc_circle_off)
         focusDetail.setText(if (on) R.string.cc_on else R.string.cc_off)
     }
 
@@ -396,7 +439,7 @@ class ControlCenterPanel(
     }
 
     private fun renderFlashlight() {
-        flashlightBadge.background = circle(if (torchOn) TORCH_ON_COLOR else BADGE_OFF_COLOR)
+        if (torchOn) flashlightBadge.background = circle(TORCH_ON_COLOR) else flashlightBadge.setBackgroundResource(R.drawable.bg_cc_circle_off)
         flashlightIcon.imageTintList = ColorStateList.valueOf(if (torchOn) TORCH_ON_ICON else Color.WHITE)
         flashlightDetail.setText(if (torchOn) R.string.cc_on else R.string.cc_off)
     }
@@ -448,9 +491,21 @@ class ControlCenterPanel(
         return audio.getStreamVolume(AudioManager.STREAM_MUSIC) / max.toFloat()
     }
 
+    /** Steps one unit at a time via [AudioManager.adjustStreamVolume] - unlike jumping straight to
+     *  an index with setStreamVolume, this is the same call the hardware volume rocker makes and is
+     *  respected much more consistently across OEM skins. */
     private fun setVolume(value: Float) {
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, (value * max).roundToInt(), 0) }
+        val target = (value * max).roundToInt().coerceIn(0, max)
+        val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val direction = when {
+            target > current -> AudioManager.ADJUST_RAISE
+            target < current -> AudioManager.ADJUST_LOWER
+            else -> return
+        }
+        repeat(kotlin.math.abs(target - current)) {
+            runCatching { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0) }
+        }
     }
 
     // -------------------------------------------------------------------------------------------
@@ -498,13 +553,15 @@ class ControlCenterPanel(
         private const val REFRESH_DELAY_MS = 400L
         private const val TOGGLE_REFRESH_DELAY_MS = 900L
         private const val MEDIA_REFRESH_DELAY_MS = 350L
+        private const val CLOCK_UPDATE_MS = 60_000L
+        private const val STATUS_WIFI_OFF_ALPHA = 0.4f
+        private const val STATUS_BATTERY_CHARGING_COLOR = 0xFF34C759.toInt()
 
-        private const val BADGE_OFF_COLOR = 0x665A8DD6
         private const val FOCUS_ON_COLOR = 0xFF5E5CE6.toInt()
         private const val TORCH_ON_COLOR = 0xFFFFD60A.toInt()
         private const val TORCH_ON_ICON = 0xFF1C1C1E.toInt()
+        private const val ROTATION_ON_ICON = 0xFF18A107.toInt()
         private const val SILENT_ON_ICON = 0xFF34C759.toInt()
-        private const val ROTATION_ON_ICON = 0xFFFF3B30.toInt()
         private const val BATTERY_SAVER_ICON = 0xFFFFCC00.toInt()
         private const val BRIGHTNESS_ICON = 0xFFFFB800.toInt()
         private const val VOLUME_ICON = 0xFF4DA3FF.toInt()
