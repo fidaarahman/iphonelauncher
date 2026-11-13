@@ -39,6 +39,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.example.launcherapp.R
+import com.example.launcherapp.ui.activities.ThemePacksActivity
 import com.example.launcherapp.views.VerticalSliderView
 import java.util.Date
 import kotlin.math.roundToInt
@@ -119,6 +120,7 @@ class ControlCenterPanel(
     private val flashlightDetail: TextView = root.findViewById(R.id.ccFlashlightDetail)
     private val rotationTile: View = root.findViewById(R.id.ccRotationTile)
     private val rotationIcon: ImageView = root.findViewById(R.id.ccRotationIcon)
+    private val themeTile: View = root.findViewById(R.id.ccThemeTile)
     private val mirroringTile: View = root.findViewById(R.id.ccMirroringTile)
     private val batteryTile: View = root.findViewById(R.id.ccBatteryTile)
     private val batteryIcon: ImageView = root.findViewById(R.id.ccBatteryIcon)
@@ -160,7 +162,13 @@ class ControlCenterPanel(
     fun start() {
         statusBatteryFill.pivotX = 0f
         handler.post(clockRunnable)
-        runCatching { context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }
+        // ACTION_BATTERY_CHANGED is sticky - registerReceiver() hands back the current state
+        // immediately as its return value, but onReceive() only fires a moment later. Render that
+        // return value right away so the real level shows from the first frame, not a flash of full.
+        val stickyBattery = runCatching {
+            context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }.getOrNull()
+        stickyBattery?.let { renderStatusBattery(it) }
         bindConnectivity()
         bindMedia()
         bindControls()
@@ -410,6 +418,7 @@ class ControlCenterPanel(
             refreshStates()
         }
 
+        themeTile.setOnClickListener { open(Intent(context, ThemePacksActivity::class.java)) }
         mirroringTile.setOnClickListener { open(Intent(Settings.ACTION_CAST_SETTINGS)) }
         batteryTile.setOnClickListener { open(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) }
     }

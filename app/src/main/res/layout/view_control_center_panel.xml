@@ -542,11 +542,27 @@
         </FrameLayout>
 
         <FrameLayout
-            android:id="@+id/ccMirroringTile"
+            android:id="@+id/ccThemeTile"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@drawable/bg_cc_circle_off"
             android:tag="3,4">
+
+            <ImageView
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_theme"
+                app:tint="@android:color/white" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/ccMirroringTile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cc_circle_off"
+            android:tag="3,5">
 
             <ImageView
                 android:layout_width="36dp"

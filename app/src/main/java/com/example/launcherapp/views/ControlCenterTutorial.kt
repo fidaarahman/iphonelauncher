@@ -11,17 +11,6 @@ import android.widget.FrameLayout
 import com.example.launcherapp.R
 import com.example.launcherapp.databinding.DialogControlCenterTutorialBinding
 
-/**
- * The "Hold & drag to open Control Center" tutorial (dialog_control_center_tutorial.xml), shared by
- * both places that show it, so they look and behave the same:
- * - ControlCenterAccessibilityService: over Android's Settings, right after the service is turned on;
- * - ControlCenterActivity: inside the app (when the service couldn't show it, or Control Center is
- *   switched on while Accessibility was already on).
- *
- * [bind] fills the texts, puts the arrow + hand under the middle of the real trigger line (the line
- * covers the right half of the top edge, so its middle is at 75% of the width), wires the buttons
- * and starts the bounce. Cancel the returned animator when the tutorial is removed.
- */
 object ControlCenterTutorial {
 
     private val HIGHLIGHT_COLOR = Color.parseColor("#FFD60A")

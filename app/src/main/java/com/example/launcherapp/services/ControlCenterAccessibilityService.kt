@@ -405,7 +405,6 @@ class ControlCenterAccessibilityService : AccessibilityService() {
                     startY = event.rawY
                     moveCount = 0
                     Log.d(TAG, "line DOWN at rawX=${event.rawX}, rawY=${event.rawY} - opening panel right away")
-                    (v as? EdgeTriggerView)?.setPressedLook(true)
                     // Open at once: Android grabs a status-bar drag for its own shade ~70-110ms
                     // after the touch (see the logs), so our panel must already be on screen then.
                     triggered = true
@@ -414,7 +413,6 @@ class ControlCenterAccessibilityService : AccessibilityService() {
                 }
                 MotionEvent.ACTION_UP -> {
                     Log.d(TAG, "line UP - dragged ${event.rawY - startY}px after $moveCount moves, opened=$triggered")
-                    (v as? EdgeTriggerView)?.setPressedLook(false)
                     return true
                 }
                 MotionEvent.ACTION_CANCEL -> {
@@ -424,7 +422,6 @@ class ControlCenterAccessibilityService : AccessibilityService() {
                     // show our panel instead.
                     val dy = event.rawY - startY
                     Log.d(TAG, "line CANCEL - the system took the touch after $moveCount moves (dragged ${dy}px), opened=$triggered")
-                    (v as? EdgeTriggerView)?.setPressedLook(false)
                     if (triggered || dy > dp(TRIGGER_DRAG_DP)) {
                         dismissSystemShade()
                         if (!triggered) {
@@ -756,17 +753,13 @@ class ControlCenterAccessibilityService : AccessibilityService() {
 
     /**
      * The trigger line: a grey rounded bar drawn at the very top of its (taller, invisible) touch
-     * area, so it's easy to grab. Slightly brighter while held.
+     * area, so it's easy to grab. Its color never changes while held - showing the panel is
+     * feedback enough.
      */
     private class EdgeTriggerView(context: Context) : View(context) {
         private val density = context.resources.displayMetrics.density
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = LINE_COLOR }
         private val rect = RectF()
-
-        fun setPressedLook(pressed: Boolean) {
-            paint.color = if (pressed) LINE_PRESSED_COLOR else LINE_COLOR
-            invalidate()
-        }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
@@ -778,7 +771,6 @@ class ControlCenterAccessibilityService : AccessibilityService() {
 
         private companion object {
             const val LINE_COLOR = 0xCCB4B4B4.toInt()
-            const val LINE_PRESSED_COLOR = 0xFFE0E0E0.toInt()
             const val LINE_THICKNESS_DP = 5f
             const val LINE_TOP_DP = 1f
             const val LINE_SIDE_INSET_DP = 6f
