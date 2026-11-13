@@ -1,6 +1,7 @@
 package com.example.launcherapp.services
 
 import android.accessibilityservice.AccessibilityButtonController
+import android.animation.ValueAnimator
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.BroadcastReceiver
@@ -43,7 +44,9 @@ import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
 import androidx.core.view.updatePadding
 import com.example.launcherapp.R
+import com.example.launcherapp.databinding.DialogControlCenterTutorialBinding
 import com.example.launcherapp.ui.model.ControlCenterSettings
+import com.example.launcherapp.ui.views.ControlCenterTutorial
 import com.example.launcherapp.utils.SnapshotBlur
 import java.util.Calendar
 import kotlin.concurrent.thread
@@ -81,6 +84,11 @@ class ControlCenterAccessibilityService : AccessibilityService() {
     private var panelClosing = false
     private var panelShownAt = 0L
 
+    // ---- "Hold & drag" tutorial shown over Settings right after the service is turned on ----
+    private var tutorialWindow: View? = null
+    private var tutorialAnimator: ValueAnimator? = null
+    private var tutorialShownAt = 0L
+
     private var nightShiftOverlayView: View? = null
     private var nightShiftActive = false
     private val nightShiftHandler = Handler(Looper.getMainLooper())
@@ -101,7 +109,10 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context, intent: Intent) {
             Log.d(TAG, "refresh broadcast - Control Center enabled=${ControlCenterSettings.enabled}")
             refreshEdgeTrigger()
-            if (!ControlCenterSettings.enabled) hidePanel("Control Center switched off", animate = false)
+            if (!ControlCenterSettings.enabled) {
+                hidePanel("Control Center switched off", animate = false)
+                hideTutorialOverlay()
+            }
         }
     }
 
@@ -114,6 +125,78 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         registerScreenOffReceiver()
         registerControlCenterRefreshReceiver()
         nightShiftHandler.post(nightShiftRunnable)
+        // Just turned on from our app's flow: show the tutorial right here, over Settings.
+        if (ControlCenterSettings.enabled && ControlCenterSettings.tutorialPending) {
+            ControlCenterSettings.tutorialPending = false
+            // A short wait, so Android's "Allow full control?" dialog has closed first.
+            mainHandler.postDelayed({ showTutorialOverlay() }, TUTORIAL_DELAY_MS)
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // "Hold & drag" tutorial over Settings
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The same tutorial as in the app (ControlCenterTutorial), but as an accessibility overlay, so it
+     * appears over Android's Settings the moment the service is turned on. The trigger line is put
+     * back on top of it, so the user can try the gesture right away (opening the panel closes it).
+     */
+    private fun showTutorialOverlay() {
+        if (tutorialWindow != null || !ControlCenterSettings.enabled) return
+        val tutorial = DialogControlCenterTutorialBinding.inflate(LayoutInflater.from(this))
+        // Focusable wrapper, so Back closes the tutorial too.
+        val container = object : FrameLayout(this) {
+            override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                    if (event.action == KeyEvent.ACTION_UP) hideTutorialOverlay()
+                    return true
+                }
+                return super.dispatchKeyEvent(event)
+            }
+        }
+        container.addView(tutorial.root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) fitInsetsTypes = 0
+        }
+        val added = runCatching { windowManager.addView(container, params) }
+        Log.d(TAG, "tutorial over Settings added=${added.isSuccess}" + (added.exceptionOrNull()?.let { ", error=$it" } ?: ""))
+        if (added.isFailure) return
+
+        tutorialWindow = container
+        tutorialShownAt = SystemClock.uptimeMillis()
+        tutorialAnimator = ControlCenterTutorial.bind(
+            tutorial,
+            onEdgeSettings = {
+                hideTutorialOverlay()
+                // Edge Trigger settings screen comes in the next step.
+                android.widget.Toast.makeText(this, R.string.coming_soon, android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onGotIt = { hideTutorialOverlay() }
+        )
+        container.isFocusableInTouchMode = true
+        container.requestFocus()
+
+        // Re-add the line so it sits ABOVE the tutorial and can be tried right away.
+        removeEdgeTrigger()
+        refreshEdgeTrigger()
+    }
+
+    private fun hideTutorialOverlay() {
+        tutorialAnimator?.cancel()
+        tutorialAnimator = null
+        tutorialWindow?.let { runCatching { windowManager.removeView(it) } }
+        tutorialWindow = null
     }
 
     private fun registerNightShiftRefreshReceiver() {
@@ -162,6 +245,7 @@ class ControlCenterAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         hidePanel("service stopped", animate = false)
+        hideTutorialOverlay()
         removeEdgeTrigger()
         ControlCenterPanel.turnOffTorchIfOn(this)
 
@@ -178,6 +262,7 @@ class ControlCenterAccessibilityService : AccessibilityService() {
      * dialogs and Android's own shade only change focus - they must not close it.
      */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        closeTutorialIfScreenChanged(event)
         if (panelContainer == null || event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val eventPackage = event.packageName?.toString() ?: return
         if (eventPackage == packageName || eventPackage == SYSTEM_UI_PACKAGE) return
@@ -185,6 +270,16 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         val className = event.className?.toString() ?: return
         if (!isActivity(eventPackage, className)) return
         hidePanel("$eventPackage/$className came to the front")
+    }
+
+    /** The user left the Settings screen (Home, back to our app...) without tapping "Got it": close the tutorial. */
+    private fun closeTutorialIfScreenChanged(event: AccessibilityEvent?) {
+        if (tutorialWindow == null || event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (SystemClock.uptimeMillis() - tutorialShownAt < TUTORIAL_EVENT_GRACE_MS) return
+        val eventPackage = event.packageName?.toString() ?: return
+        if (eventPackage == SYSTEM_UI_PACKAGE) return
+        val className = event.className?.toString() ?: return
+        if (isActivity(eventPackage, className)) hideTutorialOverlay()
     }
 
     private fun isActivity(packageName: String, className: String): Boolean = runCatching {
@@ -370,6 +465,7 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         Log.d(TAG, "showPanel - already open=${panelContainer != null}, opening=$panelOpening")
         if (panelContainer != null || panelOpening) return
         panelOpening = true
+        hideTutorialOverlay() // the user just did what the tutorial shows
         if (ControlCenterSettings.vibrationEnabled) vibrate()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             captureBlurredScreen { blurred -> if (blurred != null) fadeInBlur(blurred) }
@@ -698,6 +794,9 @@ class ControlCenterAccessibilityService : AccessibilityService() {
         // Closing Android's shade when it grabbed our swipe anyway.
         private val SHADE_DISMISS_RETRIES_MS = longArrayOf(60L, 150L, 280L, 450L)
         private const val BLUR_FADE_MS = 180
+        // Wait after the service is turned on before the tutorial appears over Settings.
+        private const val TUTORIAL_DELAY_MS = 500L
+        private const val TUTORIAL_EVENT_GRACE_MS = 1000L
         private const val SHADE_DISMISS_SECOND_MS = 350L
         private const val SHADE_CLOSE_DELAY_MS = 120L
         private const val SYSTEM_UI_PACKAGE = "com.android.systemui"

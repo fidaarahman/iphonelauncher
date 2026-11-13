@@ -13,6 +13,7 @@ object ControlCenterSettings {
 
     private const val KEY_ENABLED = "control_center_enabled"
     private const val KEY_VIBRATION_ENABLED = "control_center_vibration_enabled"
+    private const val KEY_TUTORIAL_PENDING = "control_center_tutorial_pending"
 
     private const val KEY_RESIZE_WIDTH = "control_center_resize_width"
     private const val KEY_RESIZE_HEIGHT = "control_center_resize_height"
@@ -32,6 +33,14 @@ object ControlCenterSettings {
     var enabled: Boolean
         get() = SessionManager.getBool(KEY_ENABLED, true)
         set(value) = SessionManager.putBool(KEY_ENABLED, value)
+
+    /**
+     * Set when the user starts turning Control Center on from the app; the service shows the
+     * "Hold & drag" tutorial (over Settings) as soon as it's turned on, then clears it.
+     */
+    var tutorialPending: Boolean
+        get() = SessionManager.getBool(KEY_TUTORIAL_PENDING, false)
+        set(value) = SessionManager.putBool(KEY_TUTORIAL_PENDING, value)
 
     var vibrationEnabled: Boolean
         get() = SessionManager.getBool(KEY_VIBRATION_ENABLED, true)
